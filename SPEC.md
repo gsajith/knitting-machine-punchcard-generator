@@ -125,20 +125,32 @@ All resolve from a single test print, and all are constants in one profile file.
 
 ## 6. Build plan
 
-Geometry first, headless and verified against the reference card, before any UI
-exists. The risky, expensive-to-debug half is then proven correct while it is
-still a function returning triangles, and the editor becomes a pure UI problem
-on top of a known-good generator.
+Work is broken into **vertical slices** — each one cuts through every layer and
+is independently verifiable, rather than completing one horizontal layer at a
+time.
 
-| Phase | Deliverable |
-| --- | --- |
-| 0 | Project scaffold: Next.js, TypeScript, CSS Modules, Vitest, Vercel deploy |
-| 1 | `CardProfile` + core geometry: cell grid, ring-strip mesh, watertightness tests |
-| 2 | 3MF and STL writers + re-parse oracle tests against the reference card |
-| 3 | Splitting engine: bed presets, balanced distribution, overlap rows, invariants |
-| 4 | Pattern model: tile, tiling, flatten, versioned encode/decode |
-| 5 | Editor UI: canvas, drawing tools, undo/redo |
-| 6 | Card preview: tiling, all three hole types, seams, piece boundaries |
-| 7 | Export UI + "Printing this card" guide |
-| 8 | Persistence: localStorage, URL sharing, JSON import/export |
-| 9 | Polish, accessibility, responsive layout, production deploy |
+The geometry risk is still front-loaded: slice 2 produces a real printable file
+end-to-end, and slice 3 verifies our own mesh against the reference card before
+any editor work begins. What is deliberately avoided is building a headless
+library that nobody can see or demo.
+
+| # | Slice | Type | Blocked by |
+| --- | --- | --- | --- |
+| 1 | Walking skeleton: Next.js + TS + CSS Modules + Vitest, deployed | HITL | — |
+| 2 | Tracer bullet: hardcoded pattern → downloadable 3MF | AFK | 1 |
+| 3 | Re-parse oracle: verify our mesh against the reference card's lattice | AFK | 2 |
+| 4 | Complete card geometry: belt holes, loop holes, margins, height formula | AFK | 3 |
+| 5 | Tile model: tiling to 24×N, flatten, versioned encoding | AFK | 2 |
+| 6 | Editor: draw a tile, download the card it produces | AFK | 4, 5 |
+| 7 | Full-card preview + orientation toggles | AFK | 6 |
+| 8 | Length control: repeat stepper, min-rows warning | AFK | 7 |
+| 9 | Splitting engine (headless): bed presets, balanced rows, overlap rows | AFK | 4 |
+| 10 | Split UI + multi-plate 3MF + STL fallback export | AFK | 7, 9 |
+| 11 | "Printing this card" guide panel | AFK | 10 |
+| 12 | Hole geometry presets (elongated / Classic) + Advanced panel | AFK | 4 |
+| 13 | Persistence: localStorage, URL sharing, JSON import/export | AFK | 5, 6 |
+| 14 | Test print: resolve the five open questions in §5 | HITL | 10 |
+| 15 | Polish: accessibility, responsive layout, visual design pass | HITL | 13 |
+
+Slice 14 is the only thing that can falsify ADR-0008's pin-clearance inference.
+It gates whether the default hole geometry is correct.
