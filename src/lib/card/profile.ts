@@ -86,13 +86,55 @@ export function stitchCentreX(profile: CardProfile, column: number): number {
   return (column - (profile.columns - 1) / 2) * profile.stitchPitch;
 }
 
-/** Centre Y of a row, relative to the card centre. */
-export function rowCentreY(
+/**
+ * Where the rows sit.
+ *
+ * These live with the profile rather than with the mesh builder because they
+ * define the card's row phase, which is part of the specification the builder
+ * and the verifier are each measured against — not an implementation detail
+ * either one owns.
+ */
+
+/** Centre Y of a row, relative to the card centre. Pattern and belt holes. */
+export function rowCentre(
   profile: CardProfile,
   row: number,
   rows: number,
 ): number {
   return (row - (rows - 1) / 2) * profile.rowPitch;
+}
+
+/**
+ * Y of a boundary between rows, relative to the card centre. Loop holes.
+ * Boundary 0 is the card's bottom edge; boundary `rows` is its top edge.
+ */
+export function rowBoundary(
+  profile: CardProfile,
+  boundary: number,
+  rows: number,
+): number {
+  return (boundary - rows / 2) * profile.rowPitch;
+}
+
+/**
+ * Which row boundaries carry loop holes: the two in from each end.
+ *
+ * Perforating the edge strip along the card's whole length would weaken the
+ * most fragile part of a 0.2 mm print, so these go at the ends only — see
+ * ADR-0001.
+ *
+ * Open question for #9 (splitting): under a 2-row overlap seam, only the inner
+ * hole of each pair lines up across the joint. The outer one ends up over solid
+ * material from the neighbouring piece. Two per end matches the reference card
+ * and mathgrrl's `loop()` module, so it stands until the seam geometry is real
+ * and can settle whether the second hole earns its place.
+ */
+export function loopHoleBoundaries(rows: number): number[] {
+  const candidates = [1, 2, rows - 2, rows - 1];
+  const usable = candidates.filter(
+    (boundary) => boundary >= 1 && boundary <= rows - 1,
+  );
+  return [...new Set(usable)].sort((a, b) => a - b);
 }
 
 /** Overall card length for a given row count, in mm. */

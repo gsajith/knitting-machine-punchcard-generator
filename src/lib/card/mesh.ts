@@ -1,4 +1,10 @@
-import { type CardProfile, type HoleShape } from "./profile";
+import {
+  loopHoleBoundaries,
+  rowBoundary,
+  rowCentre,
+  type CardProfile,
+  type HoleShape,
+} from "./profile";
 import { isPunched, type Pattern } from "./pattern";
 
 /** An indexed triangle mesh. */
@@ -12,8 +18,14 @@ export interface Mesh {
 /** Tolerance for treating two positions as the same vertex, in mm. */
 const WELD_TOLERANCE = 1e-6;
 
-/** Slack when testing whether a cut falls inside a cell, in mm. */
-const CUT_EPSILON = 1e-9;
+/**
+ * Slack when testing whether a cut falls inside a cell, in mm.
+ *
+ * Matched to WELD_TOLERANCE deliberately. A cut closer to a cell corner than
+ * the weld tolerance would be accepted here and then welded onto the corner,
+ * putting the same vertex into the boundary twice.
+ */
+const CUT_EPSILON = WELD_TOLERANCE;
 
 interface Point2 {
   x: number;
@@ -218,43 +230,26 @@ function addCell(
   triangulateRing(triangles, outer, inner);
 }
 
-/** Y position of the centre of a row, relative to the card centre. */
-export function rowCentre(
-  profile: CardProfile,
-  row: number,
-  rows: number,
-): number {
-  return (row - (rows - 1) / 2) * profile.rowPitch;
-}
-
-/** Y of a boundary between rows. Boundary 0 is the card's bottom edge. */
-export function rowBoundary(
-  profile: CardProfile,
-  boundary: number,
-  rows: number,
-): number {
-  return (boundary - rows / 2) * profile.rowPitch;
-}
-
-/**
- * Which row boundaries carry loop holes.
- *
- * Only the ends of the piece: the two boundaries in from each end, matching the
- * reference card. Perforating the edge strip along the card's whole length
- * would weaken the most fragile part of a 0.2 mm print — see ADR-0001.
- */
-export function loopHoleBoundaries(rows: number): number[] {
-  const candidates = [1, 2, rows - 2, rows - 1];
-  const usable = candidates.filter(
-    (boundary) => boundary >= 1 && boundary <= rows - 1,
-  );
-  return [...new Set(usable)].sort((a, b) => a - b);
-}
-
 function buildStrips(pattern: Pattern, profile: CardProfile): Strip[] {
   const rows = pattern.rows;
   const halfWidth = profile.cardWidth / 2;
   const halfPattern = (profile.columns * profile.stitchPitch) / 2;
+
+  // Each hole column has to fall in its own strip, in this order, or the
+  // strips below overlap and the surface silently stops being closed.
+  if (
+    !(
+      halfPattern < profile.beltHoleOffsetX &&
+      profile.beltHoleOffsetX < profile.loopHoleOffsetX &&
+      profile.loopHoleOffsetX < halfWidth
+    )
+  ) {
+    throw new Error(
+      `Profile "${profile.name}" places its hole columns out of order: ` +
+        `pattern edge ${halfPattern}, belt ${profile.beltHoleOffsetX}, ` +
+        `loop ${profile.loopHoleOffsetX}, card edge ${halfWidth}.`,
+    );
+  }
 
   // Between the belt and loop columns, so each sits inside its own strip.
   const edgeSplit = (profile.beltHoleOffsetX + profile.loopHoleOffsetX) / 2;

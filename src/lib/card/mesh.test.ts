@@ -16,6 +16,30 @@ function blankCard() {
   return buildCardMesh(createPattern(BROTHER_24.columns, ROWS), BROTHER_24);
 }
 
+describe("profile validation", () => {
+  // A profile whose hole columns are out of order makes the strips overlap,
+  // which silently produces an unclosed surface rather than an obvious error.
+  it("refuses a profile with its belt and loop columns transposed", () => {
+    const transposed = {
+      ...BROTHER_24,
+      beltHoleOffsetX: BROTHER_24.loopHoleOffsetX,
+      loopHoleOffsetX: BROTHER_24.beltHoleOffsetX,
+    };
+
+    expect(() =>
+      buildCardMesh(createPattern(BROTHER_24.columns, ROWS), transposed),
+    ).toThrow(/out of order/);
+  });
+
+  it("refuses a profile whose loop column falls outside the card", () => {
+    const overhanging = { ...BROTHER_24, loopHoleOffsetX: 80 };
+
+    expect(() =>
+      buildCardMesh(createPattern(BROTHER_24.columns, ROWS), overhanging),
+    ).toThrow(/out of order/);
+  });
+});
+
 describe("buildCardMesh", () => {
   it("produces a closed mesh with no holes punched", () => {
     expect(countUnpairedEdges(blankCard())).toBe(0);

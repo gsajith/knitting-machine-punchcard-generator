@@ -12,12 +12,7 @@ import {
   medianSpacing,
 } from "@/lib/card/analyze";
 import { demoPattern } from "@/lib/card/demo-pattern";
-import {
-  buildCardMesh,
-  loopHoleBoundaries,
-  rowBoundary,
-  type Mesh,
-} from "@/lib/card/mesh";
+import { buildCardMesh, type Mesh } from "@/lib/card/mesh";
 import {
   createPattern,
   isPunched,
@@ -25,7 +20,12 @@ import {
   type Pattern,
 } from "@/lib/card/pattern";
 import { read3mf } from "@/lib/card/read-3mf";
-import { BROTHER_24, BROTHER_24_CLASSIC } from "@/lib/card/profile";
+import {
+  BROTHER_24,
+  BROTHER_24_CLASSIC,
+  loopHoleBoundaries,
+  rowBoundary,
+} from "@/lib/card/profile";
 import { meshTo3mf } from "@/lib/card/threemf";
 
 const ROWS = 8;

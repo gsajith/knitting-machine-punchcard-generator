@@ -1,21 +1,23 @@
+import { type Mesh } from "./mesh";
+import { isPunched, type Pattern } from "./pattern";
 import {
   loopHoleBoundaries,
   rowBoundary,
   rowCentre,
-  type Mesh,
-} from "./mesh";
-import { isPunched, type Pattern } from "./pattern";
-import { stitchCentreX, rowCentreY, type CardProfile } from "./profile";
+  stitchCentreX,
+  type CardProfile,
+} from "./profile";
 
 /**
  * Reads a finished mesh back into the features it was supposed to contain.
  *
- * This is the verification oracle. The generator and this analyzer share no
- * code — the generator emits triangles from a lattice, and this recovers a
- * lattice from triangles — so agreement between them is real evidence rather
- * than a tautology. It also runs against the hand-drawn reference cards in
- * `reference/`, which is how the card profile was established in the first
- * place.
+ * This is the verification oracle. It shares no construction code with the
+ * generator — that emits triangles from a lattice, this recovers a lattice
+ * from triangles — so agreement between them is real evidence rather than a
+ * tautology. Both do read the same `CardProfile`, deliberately: the profile is
+ * the specification each is measured against, not an implementation either one
+ * owns. It also runs against the hand-drawn reference cards in `reference/`,
+ * which is how the card profile was established in the first place.
  */
 
 /** How far a vertex may sit from the top plane and still count as on it. */
@@ -290,7 +292,7 @@ export function checkPatternLattice(
 
     const offX = Math.abs(hole.centreX - stitchCentreX(profile, column));
     const offY = Math.abs(
-      hole.centreY - rowCentreY(profile, row, pattern.rows),
+      hole.centreY - rowCentre(profile, row, pattern.rows),
     );
 
     if (offX > tolerance) {
