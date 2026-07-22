@@ -10,7 +10,6 @@ import {
   smallestLegalRepeats,
   type Design,
 } from "@/lib/card/design";
-import { buildCardMesh } from "@/lib/card/mesh";
 import { applyOrientation, type Orientation } from "@/lib/card/orientation";
 import { countPunched } from "@/lib/card/pattern";
 import { BROTHER_24, cardLength } from "@/lib/card/profile";
@@ -27,7 +26,16 @@ import {
   mirrorTile,
   shiftTile,
 } from "@/lib/card/tile-ops";
-import { meshTo3mf } from "@/lib/card/threemf";
+import {
+  exportDownload,
+  type ExportFormat,
+} from "@/lib/card/export";
+import {
+  describeSplit,
+  minimumPieces,
+  PRINTERS,
+  splitCard,
+} from "@/lib/card/split";
 
 import { CardPreview } from "./card-preview";
 import styles from "./studio.module.css";
@@ -60,6 +68,9 @@ export function Studio() {
     mirror: false,
     flip: false,
   });
+  const [printerName, setPrinterName] = useState(PRINTERS[4].name);
+  const [format, setFormat] = useState<ExportFormat>("3mf");
+  const [extraPieces, setExtraPieces] = useState(0);
 
   const commit = useCallback(
     (next: Design) => {
@@ -114,15 +125,24 @@ export function Studio() {
     [design, orientation],
   );
 
+  const printer = PRINTERS.find((p) => p.name === printerName) ?? PRINTERS[4];
+  const fewest = minimumPieces(rows, printer, PROFILE);
+  const pieceCount = fewest + extraPieces;
+  const split = useMemo(
+    () => splitCard(rows, pieceCount, printer, PROFILE),
+    [rows, pieceCount, printer],
+  );
+  const seamBoundaries = split.pieces
+    .slice(0, -1)
+    .map((piece) => piece.lastRow + 1);
+
   const download = () => {
-    const mesh = buildCardMesh(pattern, PROFILE);
-    const blob = new Blob([meshTo3mf(mesh, "punchcard")], {
-      type: "application/octet-stream",
-    });
+    const file = exportDownload(pattern, split, PROFILE, format);
+    const blob = new Blob([file.bytes], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `punchcard-${rows}-rows.3mf`;
+    link.download = file.name;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -236,7 +256,11 @@ export function Studio() {
           </span>
         </div>
 
-        <CardPreview pattern={pattern} profile={PROFILE} />
+        <CardPreview
+          pattern={pattern}
+          profile={PROFILE}
+          seamBoundaries={seamBoundaries}
+        />
 
         {isTile && tile ? (
           <div className={styles.row}>
@@ -267,6 +291,63 @@ export function Studio() {
             figure, not a measured one.
           </p>
         ) : null}
+
+        <div className={styles.row}>
+          <label className={styles.field}>
+            <span>Printer</span>
+            <select
+              value={printerName}
+              onChange={(event) => {
+                setPrinterName(event.target.value);
+                setExtraPieces(0);
+              }}
+            >
+              {PRINTERS.map((option) => (
+                <option key={option.name} value={option.name}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.field}>
+            <span>Pieces</span>
+            <input
+              type="number"
+              min={fewest}
+              max={fewest + 6}
+              value={pieceCount}
+              onChange={(event) => {
+                const wanted = Number(event.target.value);
+                if (!Number.isInteger(wanted)) return;
+                setExtraPieces(Math.max(0, wanted - fewest));
+              }}
+            />
+          </label>
+
+          <label className={styles.field}>
+            <span>Format</span>
+            <select
+              value={format}
+              onChange={(event) =>
+                setFormat(event.target.value as ExportFormat)
+              }
+            >
+              <option value="3mf">3MF</option>
+              <option value="stl">STL</option>
+            </select>
+          </label>
+        </div>
+
+        <p className={styles.note}>
+          {describeSplit(split)}
+          {split.pieces.length > 1
+            ? `, each carrying ${PROFILE.overlapRows} overlap rows that duplicate the next piece. Clip them together through the loop holes.`
+            : "."}
+          {!split.fits
+            ? " This still will not fit the bed — add more pieces."
+            : ""}
+        </p>
 
         <div className={styles.row}>
           <label className={styles.check}>
