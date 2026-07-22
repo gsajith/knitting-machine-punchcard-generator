@@ -117,24 +117,21 @@ export function rowBoundary(
 }
 
 /**
- * Which row boundaries carry loop holes: the two in from each end.
+ * Which row boundaries carry loop holes: every interior one.
  *
- * Perforating the edge strip along the card's whole length would weaken the
- * most fragile part of a 0.2 mm print, so these go at the ends only — see
- * ADR-0001.
+ * Boundary 0 and boundary `rows` are the card's own edges and get nothing — a
+ * hole there would be a notch. So a card of N rows carries N-1 loop holes per
+ * side at a uniform row-pitch spacing, which is exactly what the reference card
+ * does (51 holes at 5.000 mm across a 52-row card).
  *
- * Open question for #9 (splitting): under a 2-row overlap seam, only the inner
- * hole of each pair lines up across the joint. The outer one ends up over solid
- * material from the neighbouring piece. Two per end matches the reference card
- * and mathgrrl's `loop()` module, so it stands until the seam geometry is real
- * and can settle whether the second hole earns its place.
+ * An earlier version placed these at the piece ends only, to avoid perforating
+ * the most fragile part of a 0.2 mm print every 5 mm. That spacing turned out
+ * to be too tight for real punchcard clips, which the reference card's spacing
+ * fits. See ADR-0001 — physical fit beats the fragility argument, and the
+ * fragility question moves to the test print in #14.
  */
 export function loopHoleBoundaries(rows: number): number[] {
-  const candidates = [1, 2, rows - 2, rows - 1];
-  const usable = candidates.filter(
-    (boundary) => boundary >= 1 && boundary <= rows - 1,
-  );
-  return [...new Set(usable)].sort((a, b) => a - b);
+  return Array.from({ length: Math.max(0, rows - 1) }, (_, k) => k + 1);
 }
 
 /** Overall card length for a given row count, in mm. */

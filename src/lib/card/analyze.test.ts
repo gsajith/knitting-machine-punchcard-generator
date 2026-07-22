@@ -157,11 +157,13 @@ describe("machine holes", () => {
     }
   });
 
-  it("puts loop holes only at the ends, on row boundaries", () => {
+  it("puts a loop hole on every interior row boundary", () => {
     const loops = classifyLoops(analysis(), BROTHER_24).loop;
     const boundaries = loopHoleBoundaries(ROWS);
 
-    expect(loops).toHaveLength(2 * boundaries.length);
+    // N rows means N-1 interior boundaries — the card's own edges get none.
+    expect(boundaries).toHaveLength(ROWS - 1);
+    expect(loops).toHaveLength(2 * (ROWS - 1));
 
     for (const hole of loops) {
       expect(Math.abs(hole.centreX)).toBeCloseTo(BROTHER_24.loopHoleOffsetX, 6);
@@ -177,8 +179,19 @@ describe("machine holes", () => {
     );
 
     expect(recovered).toEqual(expected);
-    // ...and none of them in the middle of the card.
-    expect(recovered.some((y) => Math.abs(y) < BROTHER_24.rowPitch)).toBe(false);
+  });
+
+  // The spacing a clip actually has to fit. Uniform at the row pitch, matching
+  // the reference card's 51 holes at 5.000 mm across 52 rows.
+  it("spaces loop holes one row pitch apart, uniformly", () => {
+    const left = classifyLoops(analysis(), BROTHER_24)
+      .loop.filter((hole) => hole.centreX < 0)
+      .map((hole) => hole.centreY)
+      .sort((a, b) => a - b);
+
+    for (let i = 1; i < left.length; i++) {
+      expect(left[i] - left[i - 1]).toBeCloseTo(BROTHER_24.rowPitch, 6);
+    }
   });
 
   it("offsets loop holes half a row from belt holes", () => {
