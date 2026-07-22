@@ -1,4 +1,9 @@
-import { type Mesh } from "./mesh";
+import {
+  loopHoleBoundaries,
+  rowBoundary,
+  rowCentre,
+  type Mesh,
+} from "./mesh";
 import { isPunched, type Pattern } from "./pattern";
 import { stitchCentreX, rowCentreY, type CardProfile } from "./profile";
 
@@ -332,6 +337,117 @@ export function checkPatternLattice(
   }
 
   return violations;
+}
+
+/**
+ * Checks the machine features: belt holes on every row centre, loop holes on
+ * the row boundaries at each end.
+ *
+ * Belt holes are the load-bearing ones — the drum's drive pins seat in them, so
+ * a misplaced belt hole means a card that will not feed. Loop holes only take
+ * the joining clips and have slack.
+ */
+export function checkMachineHoles(
+  analysis: MeshAnalysis,
+  profile: CardProfile,
+  rows: number,
+  options: LatticeOptions = {},
+): string[] {
+  const tolerance = options.tolerance ?? 0.02;
+  const sizeTolerance = options.sizeTolerance ?? 0.02;
+  const violations: string[] = [];
+  const grouped = classifyLoops(analysis, profile);
+
+  const checkColumn = (
+    holes: Loop[],
+    kind: "belt" | "loop",
+    offsetX: number,
+    shape: { width: number; height: number },
+    expectedY: number[],
+  ): void => {
+    const expectedCount = 2 * expectedY.length;
+    if (holes.length !== expectedCount) {
+      violations.push(
+        `found ${holes.length} ${kind} holes, expected ${expectedCount}`,
+      );
+    }
+
+    for (const hole of holes) {
+      const where = `(${hole.centreX.toFixed(3)}, ${hole.centreY.toFixed(3)})`;
+
+      const offX = Math.abs(Math.abs(hole.centreX) - offsetX);
+      if (offX > tolerance) {
+        violations.push(
+          `${kind} hole at ${where} is ${offX.toFixed(3)} mm off its column`,
+        );
+      }
+
+      const nearestY = expectedY.reduce((best, candidate) =>
+        Math.abs(candidate - hole.centreY) < Math.abs(best - hole.centreY)
+          ? candidate
+          : best,
+      );
+      const offY = Math.abs(hole.centreY - nearestY);
+      if (offY > tolerance) {
+        violations.push(
+          `${kind} hole at ${where} is ${offY.toFixed(3)} mm off its row`,
+        );
+      }
+
+      if (Math.abs(hole.width - shape.width) > sizeTolerance) {
+        violations.push(
+          `${kind} hole at ${where} is ${hole.width.toFixed(3)} mm wide, expected ${shape.width}`,
+        );
+      }
+      if (Math.abs(hole.height - shape.height) > sizeTolerance) {
+        violations.push(
+          `${kind} hole at ${where} is ${hole.height.toFixed(3)} mm tall, expected ${shape.height}`,
+        );
+      }
+    }
+
+    // Both edges must carry the column, not one edge twice.
+    const left = holes.filter((hole) => hole.centreX < 0).length;
+    const right = holes.length - left;
+    if (left !== right) {
+      violations.push(
+        `${kind} holes are unbalanced: ${left} on the left edge, ${right} on the right`,
+      );
+    }
+  };
+
+  checkColumn(
+    grouped.belt,
+    "belt",
+    profile.beltHoleOffsetX,
+    profile.beltHole,
+    Array.from({ length: rows }, (_, row) => rowCentre(profile, row, rows)),
+  );
+
+  checkColumn(
+    grouped.loop,
+    "loop",
+    profile.loopHoleOffsetX,
+    profile.loopHole,
+    loopHoleBoundaries(rows).map((boundary) =>
+      rowBoundary(profile, boundary, rows),
+    ),
+  );
+
+  return violations;
+}
+
+/** Every check the profile can make against a finished card. */
+export function checkCard(
+  analysis: MeshAnalysis,
+  profile: CardProfile,
+  pattern: Pattern,
+  options: LatticeOptions = {},
+): string[] {
+  return [
+    ...checkPatternLattice(analysis, profile, pattern, options),
+    ...checkMachineHoles(analysis, profile, pattern.rows, options),
+  ];
 }
 
 export interface Cluster {

@@ -1,4 +1,4 @@
-import { type CardProfile } from "./profile";
+import { type CardProfile, type HoleShape } from "./profile";
 import { isPunched, type Pattern } from "./pattern";
 
 /** An indexed triangle mesh. */
@@ -12,19 +12,48 @@ export interface Mesh {
 /** Tolerance for treating two positions as the same vertex, in mm. */
 const WELD_TOLERANCE = 1e-6;
 
+/** Slack when testing whether a cut falls inside a cell, in mm. */
+const CUT_EPSILON = 1e-9;
+
 interface Point2 {
   x: number;
   y: number;
 }
 
-/** A vertex on a cell boundary, with its angle about the cell centre. */
+/** A vertex on a cell boundary, with its angle about the hole it surrounds. */
 interface RingVertex {
   index: number;
   angle: number;
 }
 
+/** A hole at a specific place on the card, not necessarily centred in its cell. */
+interface PlacedHole {
+  centreX: number;
+  centreY: number;
+  shape: HoleShape;
+}
+
 /**
- * Deduplicates 2D positions so that neighbouring cells share their corner
+ * A full-height vertical band of the card.
+ *
+ * Each strip carries its own horizontal cuts, because the three hole types do
+ * not share a row phase: pattern and belt holes sit on row centres, loop holes
+ * sit on row boundaries. No single grid can hold both — any cut line that
+ * misses every pattern hole passes straight through the loop holes. Where two
+ * strips with different cuts meet, the neighbour's cuts are added to the shared
+ * edge so the surface stays free of T-junctions.
+ */
+interface Strip {
+  x0: number;
+  x1: number;
+  /** Ascending y positions, from the bottom of the card to the top. */
+  cuts: number[];
+  /** Hole in cell `i`, if any. */
+  holes: Map<number, PlacedHole>;
+}
+
+/**
+ * Deduplicates 2D positions so that neighbouring cells share their boundary
  * vertices. Without this the surface would be a pile of disconnected quads and
  * nothing would be watertight.
  */
@@ -126,10 +155,11 @@ function triangulateRing(
 }
 
 /**
- * Adds one cell of the card: a rectangle, optionally with a hole in it.
+ * Adds one cell: a rectangle, optionally carrying a hole.
  *
- * Cells only ever meet at their corners, so a cell's size is independent of its
- * neighbours' and the surface stays free of T-junctions.
+ * `leftExtra` and `rightExtra` are y positions the neighbouring strips need on
+ * the shared vertical edges. Including them keeps the two sides of an interface
+ * vertex-for-vertex identical even when the strips are cut differently.
  */
 function addCell(
   welder: VertexWelder,
@@ -138,42 +168,49 @@ function addCell(
   y0: number,
   x1: number,
   y1: number,
-  hole: { width: number; height: number } | null,
+  leftExtra: number[],
+  rightExtra: number[],
+  hole: PlacedHole | null,
   segments: number,
 ): void {
-  const corners: Point2[] = [
-    { x: x1, y: y1 },
-    { x: x0, y: y1 },
-    { x: x0, y: y0 },
-    { x: x1, y: y0 },
-  ];
+  // Counter-clockwise: up the right edge, across the top, down the left edge.
+  const boundary: Point2[] = [{ x: x1, y: y0 }];
+  for (const y of rightExtra) boundary.push({ x: x1, y });
+  boundary.push({ x: x1, y: y1 }, { x: x0, y: y1 });
+  for (const y of [...leftExtra].reverse()) boundary.push({ x: x0, y });
+  boundary.push({ x: x0, y: y0 });
 
   if (!hole) {
-    const [a, b, c, d] = corners.map((point) =>
-      welder.index(point.x, point.y),
-    );
-    triangles.push(a, b, c, a, c, d);
+    // Fan from the centroid. A rectangle with extra collinear edge points is
+    // still convex, so the centroid is interior and every triangle is valid.
+    const centroidX =
+      boundary.reduce((sum, point) => sum + point.x, 0) / boundary.length;
+    const centroidY =
+      boundary.reduce((sum, point) => sum + point.y, 0) / boundary.length;
+    const centre = welder.index(centroidX, centroidY);
+
+    const ring = boundary.map((point) => welder.index(point.x, point.y));
+    for (let k = 0; k < ring.length; k++) {
+      triangles.push(centre, ring[k], ring[(k + 1) % ring.length]);
+    }
     return;
   }
 
-  const centreX = (x0 + x1) / 2;
-  const centreY = (y0 + y1) / 2;
-
-  const outer: RingVertex[] = corners
+  const outer: RingVertex[] = boundary
     .map((point) => ({
       index: welder.index(point.x, point.y),
-      angle: angleAbout(point.x - centreX, point.y - centreY),
+      angle: angleAbout(point.x - hole.centreX, point.y - hole.centreY),
     }))
     .sort((a, b) => a.angle - b.angle);
 
   const inner: RingVertex[] = [];
   for (let k = 0; k < segments; k++) {
     const theta = (2 * Math.PI * k) / segments;
-    const x = centreX + (hole.width / 2) * Math.cos(theta);
-    const y = centreY + (hole.height / 2) * Math.sin(theta);
+    const x = hole.centreX + (hole.shape.width / 2) * Math.cos(theta);
+    const y = hole.centreY + (hole.shape.height / 2) * Math.sin(theta);
     inner.push({
       index: welder.index(x, y),
-      angle: angleAbout(x - centreX, y - centreY),
+      angle: angleAbout(x - hole.centreX, y - hole.centreY),
     });
   }
   inner.sort((a, b) => a.angle - b.angle);
@@ -181,51 +218,170 @@ function addCell(
   triangulateRing(triangles, outer, inner);
 }
 
-/** X positions of the cell boundaries, left to right. */
-function columnEdges(profile: CardProfile): number[] {
-  const halfCard = profile.cardWidth / 2;
-  const halfPattern = (profile.columns * profile.stitchPitch) / 2;
+/** Y position of the centre of a row, relative to the card centre. */
+export function rowCentre(
+  profile: CardProfile,
+  row: number,
+  rows: number,
+): number {
+  return (row - (rows - 1) / 2) * profile.rowPitch;
+}
 
-  const edges = [-halfCard];
-  for (let k = 0; k <= profile.columns; k++) {
-    edges.push(-halfPattern + k * profile.stitchPitch);
-  }
-  edges.push(halfCard);
-  return edges;
+/** Y of a boundary between rows. Boundary 0 is the card's bottom edge. */
+export function rowBoundary(
+  profile: CardProfile,
+  boundary: number,
+  rows: number,
+): number {
+  return (boundary - rows / 2) * profile.rowPitch;
 }
 
 /**
- * Builds the card as a flat plate perforated by its pattern holes.
+ * Which row boundaries carry loop holes.
  *
- * Belt and loop holes are not included yet — see issue #4.
+ * Only the ends of the piece: the two boundaries in from each end, matching the
+ * reference card. Perforating the edge strip along the card's whole length
+ * would weaken the most fragile part of a 0.2 mm print — see ADR-0001.
+ */
+export function loopHoleBoundaries(rows: number): number[] {
+  const candidates = [1, 2, rows - 2, rows - 1];
+  const usable = candidates.filter(
+    (boundary) => boundary >= 1 && boundary <= rows - 1,
+  );
+  return [...new Set(usable)].sort((a, b) => a - b);
+}
+
+function buildStrips(pattern: Pattern, profile: CardProfile): Strip[] {
+  const rows = pattern.rows;
+  const halfWidth = profile.cardWidth / 2;
+  const halfPattern = (profile.columns * profile.stitchPitch) / 2;
+
+  // Between the belt and loop columns, so each sits inside its own strip.
+  const edgeSplit = (profile.beltHoleOffsetX + profile.loopHoleOffsetX) / 2;
+
+  const boundaryCuts = Array.from({ length: rows + 1 }, (_, k) =>
+    rowBoundary(profile, k, rows),
+  );
+  const centreCuts = [
+    rowBoundary(profile, 0, rows),
+    ...Array.from({ length: rows }, (_, j) => rowCentre(profile, j, rows)),
+    rowBoundary(profile, rows, rows),
+  ];
+
+  const beltHoles = (centreX: number): Map<number, PlacedHole> =>
+    new Map(
+      Array.from({ length: rows }, (_, row): [number, PlacedHole] => [
+        row,
+        {
+          centreX,
+          centreY: rowCentre(profile, row, rows),
+          shape: profile.beltHole,
+        },
+      ]),
+    );
+
+  // Cell `k` of a loop strip runs from row centre k-1 to row centre k, so it is
+  // centred on row boundary k — exactly where the hole goes.
+  const loopHoles = (centreX: number): Map<number, PlacedHole> =>
+    new Map(
+      loopHoleBoundaries(rows).map((boundary): [number, PlacedHole] => [
+        boundary,
+        {
+          centreX,
+          centreY: rowBoundary(profile, boundary, rows),
+          shape: profile.loopHole,
+        },
+      ]),
+    );
+
+  const patternStrips: Strip[] = Array.from(
+    { length: profile.columns },
+    (_, column): Strip => ({
+      x0: -halfPattern + column * profile.stitchPitch,
+      x1: -halfPattern + (column + 1) * profile.stitchPitch,
+      cuts: boundaryCuts,
+      holes: new Map(
+        Array.from({ length: rows }, (_, row) => row)
+          .filter((row) => isPunched(pattern, row, column))
+          .map((row): [number, PlacedHole] => [
+            row,
+            {
+              centreX: -halfPattern + (column + 0.5) * profile.stitchPitch,
+              centreY: rowCentre(profile, row, rows),
+              shape: profile.patternHole,
+            },
+          ]),
+      ),
+    }),
+  );
+
+  return [
+    {
+      x0: -halfWidth,
+      x1: -edgeSplit,
+      cuts: centreCuts,
+      holes: loopHoles(-profile.loopHoleOffsetX),
+    },
+    {
+      x0: -edgeSplit,
+      x1: -halfPattern,
+      cuts: boundaryCuts,
+      holes: beltHoles(-profile.beltHoleOffsetX),
+    },
+    ...patternStrips,
+    {
+      x0: halfPattern,
+      x1: edgeSplit,
+      cuts: boundaryCuts,
+      holes: beltHoles(profile.beltHoleOffsetX),
+    },
+    {
+      x0: edgeSplit,
+      x1: halfWidth,
+      cuts: centreCuts,
+      holes: loopHoles(profile.loopHoleOffsetX),
+    },
+  ];
+}
+
+/** Cuts a neighbouring strip needs on a shared edge inside this cell. */
+function extrasWithin(
+  neighbour: Strip | undefined,
+  y0: number,
+  y1: number,
+): number[] {
+  if (!neighbour) return [];
+  return neighbour.cuts.filter(
+    (cut) => cut > y0 + CUT_EPSILON && cut < y1 - CUT_EPSILON,
+  );
+}
+
+/**
+ * Builds the complete card: pattern holes where the pattern says, belt holes on
+ * every row centre, and loop holes on the row boundaries at each end.
  */
 export function buildCardMesh(pattern: Pattern, profile: CardProfile): Mesh {
   const welder = new VertexWelder();
   const surface: number[] = [];
+  const strips = buildStrips(pattern, profile);
 
-  const edgesX = columnEdges(profile);
-  const halfLength = (pattern.rows * profile.rowPitch) / 2;
+  for (let s = 0; s < strips.length; s++) {
+    const strip = strips[s];
 
-  for (let row = 0; row < pattern.rows; row++) {
-    const y0 = -halfLength + row * profile.rowPitch;
-    const y1 = y0 + profile.rowPitch;
-
-    for (let cell = 0; cell < edgesX.length - 1; cell++) {
-      // Cell 0 and the last cell are the side margins; the rest are stitches.
-      const column = cell - 1;
-      const punched =
-        column >= 0 &&
-        column < profile.columns &&
-        isPunched(pattern, row, column);
+    for (let cell = 0; cell < strip.cuts.length - 1; cell++) {
+      const y0 = strip.cuts[cell];
+      const y1 = strip.cuts[cell + 1];
 
       addCell(
         welder,
         surface,
-        edgesX[cell],
+        strip.x0,
         y0,
-        edgesX[cell + 1],
+        strip.x1,
         y1,
-        punched ? profile.patternHole : null,
+        extrasWithin(strips[s - 1], y0, y1),
+        extrasWithin(strips[s + 1], y0, y1),
+        strip.holes.get(cell) ?? null,
         profile.holeSegments,
       );
     }

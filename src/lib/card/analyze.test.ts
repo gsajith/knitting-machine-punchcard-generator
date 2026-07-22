@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   analyzeTopSurface,
+  checkCard,
+  checkMachineHoles,
   checkPatternLattice,
   classifyLoops,
   clusterGroups,
@@ -10,7 +12,12 @@ import {
   medianSpacing,
 } from "@/lib/card/analyze";
 import { demoPattern } from "@/lib/card/demo-pattern";
-import { buildCardMesh, type Mesh } from "@/lib/card/mesh";
+import {
+  buildCardMesh,
+  loopHoleBoundaries,
+  rowBoundary,
+  type Mesh,
+} from "@/lib/card/mesh";
 import {
   createPattern,
   isPunched,
@@ -66,11 +73,13 @@ function scatteredPattern(): Pattern {
 }
 
 describe("analyzeTopSurface", () => {
-  it("finds the card outline and nothing else on a blank card", () => {
+  it("finds no pattern holes on a blank card, but still the machine ones", () => {
     const mesh = buildCardMesh(createPattern(BROTHER_24.columns, ROWS), BROTHER_24);
     const analysis = analyzeTopSurface(mesh);
+    const grouped = classifyLoops(analysis, BROTHER_24);
 
-    expect(analysis.holes).toHaveLength(0);
+    expect(grouped.pattern).toHaveLength(0);
+    expect(grouped.belt).toHaveLength(2 * ROWS);
     expect(analysis.outline.width).toBeCloseTo(BROTHER_24.cardWidth, 6);
     expect(analysis.outline.height).toBeCloseTo(ROWS * BROTHER_24.rowPitch, 6);
   });
@@ -79,7 +88,7 @@ describe("analyzeTopSurface", () => {
     const pattern = scatteredPattern();
     const analysis = analyzeTopSurface(buildCardMesh(pattern, BROTHER_24));
 
-    expect(analysis.holes).toHaveLength(5);
+    expect(classifyLoops(analysis, BROTHER_24).pattern).toHaveLength(5);
   });
 
   it("recovers hole size from the profile", () => {
@@ -87,7 +96,7 @@ describe("analyzeTopSurface", () => {
       buildCardMesh(scatteredPattern(), BROTHER_24),
     );
 
-    for (const hole of analysis.holes) {
+    for (const hole of classifyLoops(analysis, BROTHER_24).pattern) {
       expect(hole.width).toBeCloseTo(BROTHER_24.patternHole.width, 6);
       expect(hole.height).toBeCloseTo(BROTHER_24.patternHole.height, 6);
     }
@@ -98,7 +107,7 @@ describe("analyzeTopSurface", () => {
       buildCardMesh(scatteredPattern(), BROTHER_24_CLASSIC),
     );
 
-    for (const hole of analysis.holes) {
+    for (const hole of classifyLoops(analysis, BROTHER_24_CLASSIC).pattern) {
       expect(hole.width).toBeCloseTo(3.75, 6);
       expect(hole.height).toBeCloseTo(3.75, 6);
     }
@@ -114,16 +123,103 @@ describe("analyzeTopSurface", () => {
 });
 
 describe("classifyLoops", () => {
-  it("calls every hole on a pattern-only card a pattern hole", () => {
+  it("tells the three hole types apart", () => {
     const analysis = analyzeTopSurface(
       buildCardMesh(scatteredPattern(), BROTHER_24),
     );
     const grouped = classifyLoops(analysis, BROTHER_24);
 
     expect(grouped.pattern).toHaveLength(5);
-    expect(grouped.belt).toHaveLength(0);
-    expect(grouped.loop).toHaveLength(0);
+    expect(grouped.belt).toHaveLength(2 * ROWS);
+    expect(grouped.loop).toHaveLength(2 * loopHoleBoundaries(ROWS).length);
     expect(grouped.unknown).toHaveLength(0);
+  });
+});
+
+describe("machine holes", () => {
+  const analysis = () =>
+    analyzeTopSurface(buildCardMesh(scatteredPattern(), BROTHER_24));
+
+  it("passes a correctly generated card", () => {
+    expect(checkMachineHoles(analysis(), BROTHER_24, ROWS)).toEqual([]);
+  });
+
+  it("puts a belt hole on every row centre, both edges", () => {
+    const belt = classifyLoops(analysis(), BROTHER_24).belt;
+
+    expect(belt).toHaveLength(2 * ROWS);
+    expect(belt.filter((hole) => hole.centreX < 0)).toHaveLength(ROWS);
+
+    for (const hole of belt) {
+      expect(Math.abs(hole.centreX)).toBeCloseTo(BROTHER_24.beltHoleOffsetX, 6);
+      expect(hole.width).toBeCloseTo(BROTHER_24.beltHole.width, 6);
+      expect(hole.height).toBeCloseTo(BROTHER_24.beltHole.height, 6);
+    }
+  });
+
+  it("puts loop holes only at the ends, on row boundaries", () => {
+    const loops = classifyLoops(analysis(), BROTHER_24).loop;
+    const boundaries = loopHoleBoundaries(ROWS);
+
+    expect(loops).toHaveLength(2 * boundaries.length);
+
+    for (const hole of loops) {
+      expect(Math.abs(hole.centreX)).toBeCloseTo(BROTHER_24.loopHoleOffsetX, 6);
+      expect(hole.width).toBeCloseTo(BROTHER_24.loopHole.width, 6);
+    }
+
+    // Exactly the boundaries the profile nominates — no more, no fewer.
+    const expected = boundaries
+      .map((boundary) => rowBoundary(BROTHER_24, boundary, ROWS))
+      .sort((a, b) => a - b);
+    const recovered = [...new Set(loops.map((hole) => hole.centreY))].sort(
+      (a, b) => a - b,
+    );
+
+    expect(recovered).toEqual(expected);
+    // ...and none of them in the middle of the card.
+    expect(recovered.some((y) => Math.abs(y) < BROTHER_24.rowPitch)).toBe(false);
+  });
+
+  it("offsets loop holes half a row from belt holes", () => {
+    const grouped = classifyLoops(analysis(), BROTHER_24);
+
+    // Belt holes sit on row centres, loop holes on row boundaries. That
+    // half-row offset is the distinguishing feature of the reference card.
+    for (const loop of grouped.loop) {
+      const nearestBelt = grouped.belt.reduce((best, belt) =>
+        Math.abs(belt.centreY - loop.centreY) <
+        Math.abs(best.centreY - loop.centreY)
+          ? belt
+          : best,
+      );
+      expect(Math.abs(nearestBelt.centreY - loop.centreY)).toBeCloseTo(
+        BROTHER_24.rowPitch / 2,
+        6,
+      );
+    }
+  });
+
+  it("notices a missing belt hole column", () => {
+    const grouped = classifyLoops(analysis(), BROTHER_24);
+    const oneSided = {
+      ...analysis(),
+      holes: [
+        ...grouped.pattern,
+        ...grouped.belt.filter((hole) => hole.centreX > 0),
+        ...grouped.loop,
+      ],
+    };
+
+    const violations = checkMachineHoles(oneSided, BROTHER_24, ROWS);
+    expect(violations.join("\n")).toContain("unbalanced");
+  });
+
+  it("checks all three hole types together", () => {
+    const pattern = scatteredPattern();
+    const built = analyzeTopSurface(buildCardMesh(pattern, BROTHER_24));
+
+    expect(checkCard(built, BROTHER_24, pattern)).toEqual([]);
   });
 });
 

@@ -82,8 +82,8 @@ export function CardDownload() {
       ) : null}
 
       <p className={styles.note}>
-        Belt and loop holes are not generated yet, so this card will not feed in
-        a machine. It is here to prove the pipeline end to end.
+        Includes belt holes on every row and loop holes at both ends. The
+        pattern itself is still hardcoded until the editor is built.
       </p>
     </div>
   );
