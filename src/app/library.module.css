@@ -1,0 +1,154 @@
+.panel {
+  border: 1px solid var(--rule);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.privacy {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.saveRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+  align-items: end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field input {
+  font: inherit;
+  font-size: 0.9rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  width: 11rem;
+}
+
+.saveRow button,
+.itemActions button {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.saveRow button:hover,
+.itemActions button:hover {
+  border-color: var(--foreground);
+}
+
+.fileInput {
+  display: none;
+}
+
+.status,
+.error,
+.empty {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.status {
+  color: var(--muted);
+}
+
+.empty {
+  color: var(--muted);
+}
+
+.error {
+  color: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .error {
+    color: #f2857c;
+  }
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px dotted var(--rule);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+.itemName {
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.itemActions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.shareLink {
+  font: inherit;
+  font-size: 0.8rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  background: var(--background);
+  color: var(--foreground);
+}
