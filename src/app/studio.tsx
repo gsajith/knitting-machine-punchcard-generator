@@ -375,13 +375,13 @@ export function Studio() {
           ) : null}
         </div>
 
-        <PrintingGuide profile={PROFILE} />
-
         <p className={styles.note}>
           Flattening replaces the motif with the whole card so stitches can be
           edited one by one. It cannot be undone by re-deriving a motif — the
           card no longer says which repeat produced it.
         </p>
+
+        <PrintingGuide profile={PROFILE} />
       </section>
     </div>
   );
