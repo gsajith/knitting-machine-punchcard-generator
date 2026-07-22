@@ -12,34 +12,61 @@ import { type Mesh } from "./mesh";
  * different tool than ours.
  */
 
-const NUMBER_ATTRIBUTE = (name: string): RegExp =>
-  new RegExp(`\\b${name}="([^"]*)"`);
+/** Matches one attribute, accepting either quote style as XML allows. */
+const attributePattern = (name: string): RegExp =>
+  new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)')`);
+
+function readNumber(tag: string, name: string, pattern: RegExp): number {
+  const match = pattern.exec(tag);
+  const raw = match?.[2] ?? match?.[3];
+
+  if (raw === undefined) {
+    throw new Error(`3MF element is missing the "${name}" attribute: ${tag}`);
+  }
+
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new Error(`3MF attribute ${name}="${raw}" is not a finite number.`);
+  }
+
+  return value;
+}
 
 function parseModelXml(xml: string): Mesh {
   const positions: number[] = [];
   const triangles: number[] = [];
 
-  const xAttr = NUMBER_ATTRIBUTE("x");
-  const yAttr = NUMBER_ATTRIBUTE("y");
-  const zAttr = NUMBER_ATTRIBUTE("z");
-  const v1Attr = NUMBER_ATTRIBUTE("v1");
-  const v2Attr = NUMBER_ATTRIBUTE("v2");
-  const v3Attr = NUMBER_ATTRIBUTE("v3");
+  const attributes = {
+    x: attributePattern("x"),
+    y: attributePattern("y"),
+    z: attributePattern("z"),
+    v1: attributePattern("v1"),
+    v2: attributePattern("v2"),
+    v3: attributePattern("v3"),
+  };
 
   for (const tag of xml.match(/<vertex\b[^>]*>/g) ?? []) {
     positions.push(
-      Number(xAttr.exec(tag)?.[1]),
-      Number(yAttr.exec(tag)?.[1]),
-      Number(zAttr.exec(tag)?.[1]),
+      readNumber(tag, "x", attributes.x),
+      readNumber(tag, "y", attributes.y),
+      readNumber(tag, "z", attributes.z),
     );
   }
 
+  const vertexCount = positions.length / 3;
+
   for (const tag of xml.match(/<triangle\b[^>]*>/g) ?? []) {
-    triangles.push(
-      Number(v1Attr.exec(tag)?.[1]),
-      Number(v2Attr.exec(tag)?.[1]),
-      Number(v3Attr.exec(tag)?.[1]),
-    );
+    for (const name of ["v1", "v2", "v3"] as const) {
+      const index = readNumber(tag, name, attributes[name]);
+
+      if (!Number.isInteger(index) || index < 0 || index >= vertexCount) {
+        throw new Error(
+          `3MF triangle references vertex ${index}, but the mesh has ${vertexCount}.`,
+        );
+      }
+
+      triangles.push(index);
+    }
   }
 
   return { positions, triangles };

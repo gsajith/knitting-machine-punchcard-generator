@@ -1,4 +1,5 @@
 import { type Mesh } from "./mesh";
+import { isPunched, type Pattern } from "./pattern";
 import { stitchCentreX, rowCentreY, type CardProfile } from "./profile";
 
 /**
@@ -36,8 +37,16 @@ export interface Loop {
 export interface MeshAnalysis {
   /** The card outline — the largest boundary loop on the top face. */
   outline: Loop;
-  /** Every other boundary loop: one per hole. */
+  /** Every other boundary loop. Use `classifyLoops` to tell them apart. */
   holes: Loop[];
+  /**
+   * Boundary components that are not simple closed loops.
+   *
+   * A well-formed surface's boundary is a set of loops where every vertex has
+   * exactly two neighbours. Anything else means holes that touch, a pinched
+   * outline, or a triangulation fault.
+   */
+  openLoopCount: number;
 }
 
 function boundsOf(points: Array<{ x: number; y: number }>): Bounds2 {
@@ -97,11 +106,11 @@ export function analyzeTopSurface(mesh: Mesh): MeshAnalysis {
     }
   }
 
-  const adjacency = new Map<number, number[]>();
+  const adjacency = new Map<number, Set<number>>();
   const connect = (a: number, b: number): void => {
     const existing = adjacency.get(a);
-    if (existing) existing.push(b);
-    else adjacency.set(a, [b]);
+    if (existing) existing.add(b);
+    else adjacency.set(a, new Set([b]));
   };
 
   for (const [k, uses] of edgeUses) {
@@ -113,6 +122,7 @@ export function analyzeTopSurface(mesh: Mesh): MeshAnalysis {
 
   const visited = new Set<number>();
   const loops: Loop[] = [];
+  let openLoopCount = 0;
 
   for (const start of adjacency.keys()) {
     if (visited.has(start)) continue;
@@ -131,6 +141,12 @@ export function analyzeTopSurface(mesh: Mesh): MeshAnalysis {
         }
       }
     }
+
+    // A simple closed loop has every vertex joined to exactly two others.
+    const simple = members.every(
+      (member) => (adjacency.get(member)?.size ?? 0) === 2,
+    );
+    if (!simple) openLoopCount++;
 
     const points = members.map((v) => ({
       x: mesh.positions[v * 3],
@@ -153,7 +169,169 @@ export function analyzeTopSurface(mesh: Mesh): MeshAnalysis {
 
   loops.sort((a, b) => b.width * b.height - a.width * a.height);
 
-  return { outline: loops[0], holes: loops.slice(1) };
+  return { outline: loops[0], holes: loops.slice(1), openLoopCount };
+}
+
+/**
+ * The three kinds of hole a card carries. They have different jobs and
+ * different tolerances, so nothing downstream should treat them alike —
+ * see CONTEXT.md.
+ */
+export type LoopKind = "pattern" | "belt" | "loop" | "unknown";
+
+export interface ClassifiedLoops {
+  pattern: Loop[];
+  belt: Loop[];
+  loop: Loop[];
+  /** Anything the profile cannot account for. Always a defect. */
+  unknown: Loop[];
+}
+
+/** Which column band a loop's centre falls in. */
+export function classifyLoop(
+  loop: Loop,
+  profile: CardProfile,
+  tolerance = 0.5,
+): LoopKind {
+  const x = Math.abs(loop.centreX);
+
+  if (x <= (profile.columns * profile.stitchPitch) / 2) return "pattern";
+  if (Math.abs(x - profile.beltHoleOffsetX) <= tolerance) return "belt";
+  if (Math.abs(x - profile.loopHoleOffsetX) <= tolerance) return "loop";
+  return "unknown";
+}
+
+export function classifyLoops(
+  analysis: MeshAnalysis,
+  profile: CardProfile,
+  tolerance = 0.5,
+): ClassifiedLoops {
+  const grouped: ClassifiedLoops = {
+    pattern: [],
+    belt: [],
+    loop: [],
+    unknown: [],
+  };
+
+  for (const hole of analysis.holes) {
+    grouped[classifyLoop(hole, profile, tolerance)].push(hole);
+  }
+
+  return grouped;
+}
+
+export interface LatticeOptions {
+  /** How far a hole centre may sit from its nominal position, in mm. */
+  tolerance?: number;
+  /** How far a hole's size may differ from the profile, in mm. */
+  sizeTolerance?: number;
+}
+
+/**
+ * Checks the pattern holes in a mesh against the pattern that was asked for.
+ *
+ * Compares the *set* of occupied cells, not just whether each hole sits on some
+ * lattice site. Snapping each hole to its nearest valid site is not enough: a
+ * mirrored or flipped card puts every hole on a perfectly legal site and would
+ * pass, which is exactly the defect this oracle exists to catch.
+ *
+ * Returns one message per violation rather than throwing, so a systematic error
+ * reports every affected hole at once instead of stopping at the first.
+ */
+export function checkPatternLattice(
+  analysis: MeshAnalysis,
+  profile: CardProfile,
+  pattern: Pattern,
+  options: LatticeOptions = {},
+): string[] {
+  const tolerance = options.tolerance ?? 0.02;
+  const sizeTolerance = options.sizeTolerance ?? 0.02;
+  const violations: string[] = [];
+
+  if (analysis.openLoopCount > 0) {
+    violations.push(
+      `${analysis.openLoopCount} boundary component(s) are not simple closed loops`,
+    );
+  }
+
+  const grouped = classifyLoops(analysis, profile);
+
+  for (const stray of grouped.unknown) {
+    violations.push(
+      `loop at (${stray.centreX.toFixed(3)}, ${stray.centreY.toFixed(3)}) matches no column the profile defines`,
+    );
+  }
+
+  const occupied = new Map<string, Loop>();
+
+  for (const hole of grouped.pattern) {
+    const column = Math.round(
+      hole.centreX / profile.stitchPitch + (profile.columns - 1) / 2,
+    );
+    const row = Math.round(
+      hole.centreY / profile.rowPitch + (pattern.rows - 1) / 2,
+    );
+
+    const where = `(${hole.centreX.toFixed(3)}, ${hole.centreY.toFixed(3)})`;
+
+    if (column < 0 || column >= profile.columns) {
+      violations.push(`hole at ${where} is outside the card's stitch columns`);
+      continue;
+    }
+    if (row < 0 || row >= pattern.rows) {
+      violations.push(`hole at ${where} is outside the card's rows`);
+      continue;
+    }
+
+    const offX = Math.abs(hole.centreX - stitchCentreX(profile, column));
+    const offY = Math.abs(
+      hole.centreY - rowCentreY(profile, row, pattern.rows),
+    );
+
+    if (offX > tolerance) {
+      violations.push(
+        `hole at ${where} is ${offX.toFixed(3)} mm off column ${column}`,
+      );
+    }
+    if (offY > tolerance) {
+      violations.push(
+        `hole at ${where} is ${offY.toFixed(3)} mm off row ${row}`,
+      );
+    }
+
+    if (Math.abs(hole.width - profile.patternHole.width) > sizeTolerance) {
+      violations.push(
+        `hole at ${where} is ${hole.width.toFixed(3)} mm wide, expected ${profile.patternHole.width}`,
+      );
+    }
+    if (Math.abs(hole.height - profile.patternHole.height) > sizeTolerance) {
+      violations.push(
+        `hole at ${where} is ${hole.height.toFixed(3)} mm tall, expected ${profile.patternHole.height}`,
+      );
+    }
+
+    const cell = `${row}:${column}`;
+    if (occupied.has(cell)) {
+      violations.push(`two holes occupy row ${row}, column ${column}`);
+    }
+    occupied.set(cell, hole);
+  }
+
+  // Set comparison against the pattern. This is what catches a mirror or flip.
+  for (let row = 0; row < pattern.rows; row++) {
+    for (let column = 0; column < profile.columns; column++) {
+      const wanted = isPunched(pattern, row, column);
+      const found = occupied.has(`${row}:${column}`);
+
+      if (wanted && !found) {
+        violations.push(`row ${row}, column ${column} should be punched but is solid`);
+      } else if (!wanted && found) {
+        violations.push(`row ${row}, column ${column} is punched but should be solid`);
+      }
+    }
+  }
+
+  return violations;
 }
 
 export interface Cluster {
@@ -209,83 +387,14 @@ export function medianSpacing(values: number[]): number {
     : gaps[middle];
 }
 
-export interface LatticeOptions {
-  /** How far a hole centre may sit from its nominal position, in mm. */
-  tolerance?: number;
-  /** How far a hole's size may differ from the profile, in mm. */
-  sizeTolerance?: number;
-  /** Expected number of pattern holes, when known. */
-  expectedHoles?: number;
-}
+/** Median of a set of values. */
+export function median(values: number[]): number {
+  if (values.length === 0) return NaN;
 
-/**
- * Checks every recovered hole against the positions the profile says it should
- * occupy, returning one message per violation.
- *
- * Returning messages rather than throwing keeps the failure readable: a
- * half-row phase error reports every hole at once instead of stopping at the
- * first.
- */
-export function checkPatternLattice(
-  analysis: MeshAnalysis,
-  profile: CardProfile,
-  rows: number,
-  options: LatticeOptions = {},
-): string[] {
-  const tolerance = options.tolerance ?? 0.02;
-  const sizeTolerance = options.sizeTolerance ?? 0.02;
-  const violations: string[] = [];
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
 
-  const columnsX = Array.from({ length: profile.columns }, (_, column) =>
-    stitchCentreX(profile, column),
-  );
-  const rowsY = Array.from({ length: rows }, (_, row) =>
-    rowCentreY(profile, row, rows),
-  );
-
-  const nearest = (value: number, candidates: number[]): number =>
-    candidates.reduce((best, candidate) =>
-      Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best,
-    );
-
-  for (const hole of analysis.holes) {
-    const columnX = nearest(hole.centreX, columnsX);
-    const rowY = nearest(hole.centreY, rowsY);
-
-    const offX = Math.abs(hole.centreX - columnX);
-    const offY = Math.abs(hole.centreY - rowY);
-
-    if (offX > tolerance) {
-      violations.push(
-        `hole at (${hole.centreX.toFixed(3)}, ${hole.centreY.toFixed(3)}) is ${offX.toFixed(3)} mm off column ${columnX.toFixed(3)}`,
-      );
-    }
-    if (offY > tolerance) {
-      violations.push(
-        `hole at (${hole.centreX.toFixed(3)}, ${hole.centreY.toFixed(3)}) is ${offY.toFixed(3)} mm off row ${rowY.toFixed(3)}`,
-      );
-    }
-
-    if (Math.abs(hole.width - profile.patternHole.width) > sizeTolerance) {
-      violations.push(
-        `hole at (${hole.centreX.toFixed(3)}, ${hole.centreY.toFixed(3)}) is ${hole.width.toFixed(3)} mm wide, expected ${profile.patternHole.width}`,
-      );
-    }
-    if (Math.abs(hole.height - profile.patternHole.height) > sizeTolerance) {
-      violations.push(
-        `hole at (${hole.centreX.toFixed(3)}, ${hole.centreY.toFixed(3)}) is ${hole.height.toFixed(3)} mm tall, expected ${profile.patternHole.height}`,
-      );
-    }
-  }
-
-  if (
-    options.expectedHoles !== undefined &&
-    analysis.holes.length !== options.expectedHoles
-  ) {
-    violations.push(
-      `found ${analysis.holes.length} holes, expected ${options.expectedHoles}`,
-    );
-  }
-
-  return violations;
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
 }
