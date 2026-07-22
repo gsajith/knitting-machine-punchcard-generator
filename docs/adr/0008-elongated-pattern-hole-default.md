@@ -1,6 +1,6 @@
 # 8. Elongated 3.25 × 3.75 pattern hole as the default
 
-Status: Accepted — **provisional, rests on an unverified inference**
+Status: Accepted — **confirmed on a real machine**
 
 ## Context
 
@@ -45,11 +45,24 @@ counterpart is not load-bearing against the drum.
 
 - Webs become 1.25 mm on both axes — a ~65% improvement on the weak axis at
   essentially unchanged open area.
-- **This makes an inference the shipped behaviour.** If the reading mechanism
-  needs more than 3.25 mm of horizontal clearance, every card generated at the
-  default will under-read.
-- The downside is bounded: reverting is a one-line profile change plus a reprint,
-  and the Classic preset is already present.
-- **How to falsify:** print one card of each geometry and run both on the
-  machine. If Classic reads correctly and the default does not, swap the default
-  and update this ADR to Superseded.
+
+## Confirmed
+
+The inference held. A card generated at the elongated default was printed, fed
+through a Brother machine and **knitted successfully — the pattern came out as
+drawn**. The reading mechanism accepts a 3.25 mm horizontal hole.
+
+That resolves the open question this ADR was written around: the belt-hole
+reasoning was sound, and 3.25 mm of horizontal clearance is enough for the
+reading pins as well as the drive pins.
+
+`BROTHER_24_CLASSIC` stays in the code as a fallback, but it is no longer
+load-bearing. Issue #12, which existed to expose it as a selectable preset, was
+closed as not planned once this was confirmed — a selector is insurance against
+a risk that no longer exists.
+
+Still not established, and deliberately not claimed here:
+
+- How well the 1.25 mm webs survive repeated use over time. One successful knit
+  says the geometry reads; it says nothing about fatigue.
+- Whether a split card's seam holds, since no split card has been printed.
