@@ -113,15 +113,16 @@ export function CardPreview({ pattern, profile, seamBoundaries = [] }: Props) {
 
       <div className={styles.legend}>
         <span className={styles.key}>
-          <span className={`${styles.swatch} ${styles.swatchPattern}`} /> pattern
+          <span className={`${styles.swatch} ${styles.swatchPattern}`} aria-hidden="true" />{" "}
+          filled — pattern
         </span>
         <span className={styles.key}>
-          <span className={`${styles.swatch} ${styles.swatchBelt}`} /> belt
-          (drive)
+          <span className={`${styles.swatch} ${styles.swatchBelt}`} aria-hidden="true" />{" "}
+          outlined — belt (drive)
         </span>
         <span className={styles.key}>
-          <span className={`${styles.swatch} ${styles.swatchLoop}`} /> loop
-          (clips)
+          <span className={`${styles.swatch} ${styles.swatchLoop}`} aria-hidden="true" />{" "}
+          dashed — loop (clips)
         </span>
         <span className={styles.feed}>↑ feeds this way</span>
       </div>

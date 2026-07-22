@@ -7,7 +7,8 @@
 
 .scroller {
   overflow: auto;
-  max-height: 70vh;
+  overscroll-behavior: contain;
+  max-height: min(70vh, 40rem);
   border: 1px solid var(--rule);
   border-radius: 0.25rem;
   padding: 0.5rem;
