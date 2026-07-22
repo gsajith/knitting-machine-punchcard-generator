@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   cloneDesign,
@@ -33,7 +33,16 @@ import {
   splitCard,
 } from "@/lib/card/split";
 
+import {
+  browserStore,
+  designFromFragment,
+  loadAutosave,
+  saveAutosave,
+  type KeyValueStore,
+} from "@/lib/card/storage";
+
 import { CardPreview } from "./card-preview";
+import { Library } from "./library";
 import { PrintingGuide } from "./printing-guide";
 import styles from "./studio.module.css";
 import { TileEditor } from "./tile-editor";
@@ -60,6 +69,75 @@ export function Studio() {
   const [printerName, setPrinterName] = useState(PRINTERS[4].name);
   const [format, setFormat] = useState<ExportFormat>("3mf");
   const [extraPieces, setExtraPieces] = useState(0);
+
+  // localStorage is not visible to the server, so restoring happens after
+  // mount. The first paint is the default motif, replaced a frame later if
+  // there is a shared link or saved work.
+  const storeRef = useRef<KeyValueStore | null>(null);
+  const store = (storeRef.current ??= browserStore());
+  const [restored, setRestored] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  /*
+   * Reading state the server cannot see, which is the documented exception to
+   * the rule below. Initialising from localStorage during render would make the
+   * server and client disagree and produce a hydration mismatch, and
+   * useSyncExternalStore does not fit either — the design is state the user
+   * edits, not a snapshot the store owns. This runs once on mount.
+   */
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    try {
+      const shared = designFromFragment(globalThis.location.hash);
+      if (shared) {
+        setDesign(shared);
+        setRestored(true);
+        return;
+      }
+    } catch (cause) {
+      setRestoreError(
+        cause instanceof Error
+          ? `That share link could not be opened. ${cause.message}`
+          : "That share link could not be opened.",
+      );
+    }
+
+    const saved = loadAutosave(store);
+    if (saved) setDesign(saved);
+    setRestored(true);
+  }, [store]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // A share link pasted into an already-open tab changes the fragment without
+  // reloading, so the restore effect above never sees it. setState here is in a
+  // callback responding to an external change, which is what effects are for.
+  useEffect(() => {
+    const onHashChange = () => {
+      try {
+        const shared = designFromFragment(globalThis.location.hash);
+        if (!shared) return;
+        setDesign(shared);
+        setRestoreError(null);
+      } catch (cause) {
+        setRestoreError(
+          cause instanceof Error
+            ? `That share link could not be opened. ${cause.message}`
+            : "That share link could not be opened.",
+        );
+      }
+    };
+
+    globalThis.addEventListener("hashchange", onHashChange);
+    return () => globalThis.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Only after restoring, or the default would overwrite saved work before it
+  // has been read back.
+  useEffect(() => {
+    if (!restored) return;
+    const timer = setTimeout(() => saveAutosave(store, design), 400);
+    return () => clearTimeout(timer);
+  }, [design, restored, store]);
 
   const commit = useCallback(
     (next: Design) => {
@@ -136,6 +214,11 @@ export function Studio() {
     URL.revokeObjectURL(url);
   };
 
+  const loadDesign = (next: Design) => {
+    commit(next);
+    setRestoreError(null);
+  };
+
   const editTile = (change: (tile: Tile) => Tile) => {
     if (design.kind !== "tile") return;
     commit({ ...design, tile: change(design.tile) });
@@ -146,6 +229,12 @@ export function Studio() {
 
   return (
     <div className={styles.studio}>
+      {restoreError ? (
+        <p className={styles.restoreError} role="alert">
+          {restoreError} Your pattern is unchanged.
+        </p>
+      ) : null}
+
       <section className={styles.panel} aria-label="Motif">
         <div className={styles.panelHead}>
           <h2 className={styles.panelTitle}>Motif</h2>
@@ -383,6 +472,8 @@ export function Studio() {
 
         <PrintingGuide profile={PROFILE} />
       </section>
+
+      <Library design={design} onLoad={loadDesign} store={store} />
     </div>
   );
 }

@@ -5,9 +5,30 @@
   align-items: start;
 }
 
+.studio > :last-child {
+  grid-column: 1 / -1;
+}
+
 @media (min-width: 56rem) {
   .studio {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.restoreError {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid currentColor;
+  border-radius: 0.375rem;
+  color: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .restoreError {
+    color: #f2857c;
   }
 }
 
