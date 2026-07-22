@@ -13,12 +13,8 @@ import {
 import { applyOrientation, type Orientation } from "@/lib/card/orientation";
 import { countPunched } from "@/lib/card/pattern";
 import { BROTHER_24, cardLength } from "@/lib/card/profile";
-import {
-  createTile,
-  resizeTile,
-  tileWidthsFor,
-  type Tile,
-} from "@/lib/card/tile";
+import { resizeTile, tileWidthsFor, type Tile } from "@/lib/card/tile";
+import { usukiTile } from "@/lib/card/usuki";
 import {
   clearTile,
   flipTile,
@@ -44,15 +40,9 @@ import { TileEditor } from "./tile-editor";
 const PROFILE = BROTHER_24;
 
 function startingDesign(): Design {
-  const tile = createTile(6, 8);
-  // A small diagonal, so the card is not blank on arrival and the orientation
-  // of the drawing is immediately obvious.
-  for (let row = 0; row < 8; row++) {
-    const width = Math.floor((row * 6) / 8);
-    for (let column = 0; column <= width; column++) {
-      tile.cells[row * 6 + column] = true;
-    }
-  }
+  // A whole-card motif rather than a small repeat, so the app opens on
+  // something worth looking at instead of an empty grid.
+  const tile = usukiTile();
   return {
     kind: "tile",
     tile,
