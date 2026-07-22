@@ -2,31 +2,63 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .grid {
+  display: grid;
+  gap: 1px;
   width: 100%;
   max-width: 22rem;
-  touch-action: none;
+  padding: 1px;
+  background: var(--rule);
   border: 1px solid var(--rule);
   border-radius: 0.25rem;
-  background: var(--background);
+  touch-action: none;
+}
+
+/* Rows exist for assistive technology; the grid lays the cells out itself. */
+.row {
+  display: contents;
 }
 
 .cell {
-  fill: transparent;
-  stroke: var(--rule);
-  stroke-width: 1;
+  display: flex;
+  aspect-ratio: 1;
+  min-width: 0;
+}
+
+.stitch {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: var(--background);
   cursor: crosshair;
 }
 
 .punched {
-  fill: var(--foreground);
+  background: var(--foreground);
 }
 
-.hovered {
-  stroke: var(--foreground);
-  stroke-width: 2;
+.stitch:hover {
+  box-shadow: inset 0 0 0 2px var(--muted);
+}
+
+/*
+ * The ring has to read against both cell states, and a punched cell is filled
+ * with the same colour the ring would otherwise use — so a focused punched
+ * cell inverts it.
+ */
+.stitch:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
+  position: relative;
+  z-index: 1;
+}
+
+.punched:focus-visible {
+  outline-color: var(--background);
 }
 
 .hint {
@@ -34,6 +66,7 @@
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.7rem;
   letter-spacing: 0.04em;
+  line-height: 1.5;
   color: var(--muted);
   min-height: 1rem;
 }

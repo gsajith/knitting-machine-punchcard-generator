@@ -193,21 +193,16 @@ export function Studio() {
     [design],
   );
 
-  /** Records history once per drag rather than once per stitch. */
-  const [strokeOpen, setStrokeOpen] = useState(false);
+  /**
+   * History is recorded once when a stroke begins — a drag, or a single
+   * keyboard punch — and the edits themselves just replace the design. An
+   * earlier version tracked an "in a stroke" flag that was never cleared, so
+   * after the first drag nothing reached the undo stack at all.
+   */
   const beginStroke = useCallback(() => {
     setPast((stack) => [...stack.slice(-49), cloneDesign(design)]);
     setFuture([]);
-    setStrokeOpen(true);
   }, [design]);
-
-  const duringStroke = useCallback(
-    (next: Design) => {
-      if (strokeOpen) setDesign(next);
-      else commit(next);
-    },
-    [strokeOpen, commit],
-  );
 
   const undo = () => {
     setPast((stack) => {
@@ -303,7 +298,7 @@ export function Studio() {
           <>
             <TileEditor
               tile={tile}
-              onChange={(next) => duringStroke({ ...design, tile: next })}
+              onChange={(next) => setDesign({ ...design, tile: next })}
               onStrokeStart={beginStroke}
             />
 
