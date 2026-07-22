@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 import { webThickness, type CardProfile } from "@/lib/card/profile";
 
 import styles from "./printing-guide.module.css";
@@ -16,7 +18,7 @@ interface Props {
  * would be bound to one printer, nozzle and filament; this survives being read
  * by someone on any machine.
  */
-export function PrintingGuide({ profile }: Props) {
+function PrintingGuideContent({ profile }: Props) {
   const web = webThickness(profile);
 
   return (
@@ -127,3 +129,10 @@ export function PrintingGuide({ profile }: Props) {
     </details>
   );
 }
+
+/**
+ * Memoised because it lives inside the editor, which re-renders on every cell
+ * painted during a drag. This subtree is static apart from a few profile
+ * numbers, and the profile is a module constant, so it renders once.
+ */
+export const PrintingGuide = memo(PrintingGuideContent);
