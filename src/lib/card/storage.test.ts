@@ -4,8 +4,10 @@ import { type Design } from "@/lib/card/design";
 import { encodeDesign } from "@/lib/card/encoding";
 import { createTile, setTileCell } from "@/lib/card/tile";
 import {
+  autosaveProblem,
   clearAutosave,
   deleteSaved,
+  findByName,
   designFromFragment,
   designFromJson,
   designToFragment,
@@ -103,7 +105,7 @@ describe("named library", () => {
 
   it("saves, lists and loads by name", () => {
     const store = memoryStore();
-    const items = saveNamed(store, "Hearts", motif());
+    const { items } = saveNamed(store, "Hearts", motif());
 
     expect(items).toHaveLength(1);
     expect(items[0].name).toBe("Hearts");
@@ -113,15 +115,15 @@ describe("named library", () => {
   it("keeps several and lists newest first", () => {
     const store = memoryStore();
     saveNamed(store, "First", motif());
-    const items = saveNamed(store, "Second", motif());
+    const { items } = saveNamed(store, "Second", motif());
 
     expect(items.map((item) => item.name)).toEqual(["Second", "First"]);
   });
 
   it("renames without touching the design", () => {
     const store = memoryStore();
-    const [saved] = saveNamed(store, "Old", motif());
-    const items = renameSaved(store, saved.id, "New");
+    const { items: [saved] } = saveNamed(store, "Old", motif());
+    const { items } = renameSaved(store, saved.id, "New");
 
     expect(items[0].name).toBe("New");
     expect(loadSaved(store, saved.id)).toEqual(motif());
@@ -129,27 +131,27 @@ describe("named library", () => {
 
   it("falls back to a name rather than accepting an empty one", () => {
     const store = memoryStore();
-    const [saved] = saveNamed(store, "   ", motif());
+    const { items: [saved] } = saveNamed(store, "   ", motif());
     expect(saved.name).toBe("Untitled");
 
-    const renamed = renameSaved(store, saved.id, "  ");
+    const { items: renamed } = renameSaved(store, saved.id, "  ");
     expect(renamed[0].name).toBe("Untitled");
   });
 
   it("deletes", () => {
     const store = memoryStore();
-    const [saved] = saveNamed(store, "Hearts", motif());
+    const { items: [saved] } = saveNamed(store, "Hearts", motif());
 
-    expect(deleteSaved(store, saved.id)).toEqual([]);
+    expect(deleteSaved(store, saved.id).items).toEqual([]);
     expect(loadSaved(store, saved.id)).toBeNull();
   });
 
   it("overwrites in place when saving over an existing entry", () => {
     const store = memoryStore();
-    const [saved] = saveNamed(store, "Hearts", motif());
+    const { items: [saved] } = saveNamed(store, "Hearts", motif());
 
     const blank: Design = { kind: "tile", tile: createTile(8, 8), repeats: 5 };
-    const items = saveNamed(store, "Hearts", blank, saved.id);
+    const { items } = saveNamed(store, "Hearts", blank, saved.id);
 
     expect(items).toHaveLength(1);
     expect(loadSaved(store, saved.id)).toEqual(blank);
@@ -173,6 +175,79 @@ describe("named library", () => {
     );
 
     expect(listSaved(store)).toEqual([]);
+  });
+});
+
+describe("write failures", () => {
+  it("reports when storage refuses a named save", () => {
+    expect(saveNamed(hostileStore(), "Hearts", motif()).ok).toBe(false);
+  });
+
+  it("reports success on a working store", () => {
+    expect(saveNamed(memoryStore(), "Hearts", motif()).ok).toBe(true);
+  });
+});
+
+describe("autosaveProblem", () => {
+  it("is silent when there is nothing stored", () => {
+    expect(autosaveProblem(memoryStore())).toBeNull();
+  });
+
+  it("is silent when the stored design is readable", () => {
+    const store = memoryStore();
+    saveAutosave(store, motif());
+    expect(autosaveProblem(store)).toBeNull();
+  });
+
+  // Rejecting a future version is right; replacing it without saying so is not.
+  it("explains a future envelope version", () => {
+    const store = memoryStore();
+    store.setItem(
+      "punchcard.autosave",
+      JSON.stringify({ v: STORAGE_VERSION + 1, data: encodeDesign(motif()) }),
+    );
+    expect(autosaveProblem(store)).toMatch(/newer version/);
+  });
+
+  it("explains a design it cannot decode", () => {
+    const store = memoryStore();
+    store.setItem(
+      "punchcard.autosave",
+      JSON.stringify({ v: STORAGE_VERSION, data: "9.t.8.8.5.AAAA" }),
+    );
+    expect(autosaveProblem(store)).toMatch(/could not be read/);
+  });
+});
+
+describe("findByName", () => {
+  it("finds an existing entry so a second save overwrites it", () => {
+    const store = memoryStore();
+    const { items: [saved] } = saveNamed(store, "Hearts", motif());
+
+    expect(findByName(store, "Hearts")).toBe(saved.id);
+    expect(findByName(store, " Hearts ")).toBe(saved.id);
+    expect(findByName(store, "Other")).toBeUndefined();
+  });
+});
+
+describe("corrupt entries", () => {
+  it("treats a missing savedAt as oldest rather than sorting on NaN", () => {
+    const store = memoryStore();
+    store.setItem(
+      "punchcard.library",
+      JSON.stringify({
+        v: STORAGE_VERSION,
+        data: [
+          { id: "a", name: "No date", encoded: encodeDesign(motif()) },
+          { id: "b", name: "Dated", encoded: encodeDesign(motif()), savedAt: 5 },
+        ],
+      }),
+    );
+
+    expect(listSaved(store).map((item) => item.name)).toEqual([
+      "Dated",
+      "No date",
+    ]);
   });
 });
 

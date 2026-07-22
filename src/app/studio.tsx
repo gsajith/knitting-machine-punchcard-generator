@@ -33,11 +33,14 @@ import {
   splitCard,
 } from "@/lib/card/split";
 
+import { encodeDesign } from "@/lib/card/encoding";
 import {
+  autosaveProblem,
   browserStore,
   designFromFragment,
   loadAutosave,
   saveAutosave,
+  saveNamed,
   type KeyValueStore,
 } from "@/lib/card/storage";
 
@@ -77,6 +80,28 @@ export function Studio() {
   const store = (storeRef.current ??= browserStore());
   const [restored, setRestored] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /*
+   * Opening a shared pattern replaces whatever was in progress, and the next
+   * edit would autosave over it. Rather than prompt, the work that was already
+   * here is filed under a name first, so nothing can be lost by following a
+   * link — see the review on PR #30.
+   */
+  const adoptShared = useCallback(
+    (shared: Design) => {
+      const previous = loadAutosave(store);
+      if (previous && encodeDesign(previous) !== encodeDesign(shared)) {
+        saveNamed(store, "Before shared link", previous);
+        setNotice(
+          "Opened a shared pattern. What you had before is saved below as “Before shared link”.",
+        );
+      }
+      setDesign(shared);
+      setRestoreError(null);
+    },
+    [store],
+  );
 
   /*
    * Reading state the server cannot see, which is the documented exception to
@@ -90,7 +115,7 @@ export function Studio() {
     try {
       const shared = designFromFragment(globalThis.location.hash);
       if (shared) {
-        setDesign(shared);
+        adoptShared(shared);
         setRestored(true);
         return;
       }
@@ -104,8 +129,9 @@ export function Studio() {
 
     const saved = loadAutosave(store);
     if (saved) setDesign(saved);
+    else setRestoreError(autosaveProblem(store));
     setRestored(true);
-  }, [store]);
+  }, [store, adoptShared]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // A share link pasted into an already-open tab changes the fragment without
@@ -116,8 +142,7 @@ export function Studio() {
       try {
         const shared = designFromFragment(globalThis.location.hash);
         if (!shared) return;
-        setDesign(shared);
-        setRestoreError(null);
+        adoptShared(shared);
       } catch (cause) {
         setRestoreError(
           cause instanceof Error
@@ -129,15 +154,35 @@ export function Studio() {
 
     globalThis.addEventListener("hashchange", onHashChange);
     return () => globalThis.removeEventListener("hashchange", onHashChange);
-  }, []);
+  }, [adoptShared]);
 
   // Only after restoring, or the default would overwrite saved work before it
   // has been read back.
+  // Kept current so the flush below can save the newest design without
+  // resubscribing on every edit.
+  const latest = useRef(design);
+  useEffect(() => {
+    latest.current = design;
+  }, [design]);
+
   useEffect(() => {
     if (!restored) return;
     const timer = setTimeout(() => saveAutosave(store, design), 400);
     return () => clearTimeout(timer);
   }, [design, restored, store]);
+
+  // The debounce would otherwise swallow the last few edits when the tab is
+  // closed or navigated away from, which is exactly when they matter.
+  useEffect(() => {
+    if (!restored) return;
+    const flush = () => saveAutosave(store, latest.current);
+
+    globalThis.addEventListener("pagehide", flush);
+    return () => {
+      globalThis.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [restored, store]);
 
   const commit = useCallback(
     (next: Design) => {
@@ -232,6 +277,12 @@ export function Studio() {
       {restoreError ? (
         <p className={styles.restoreError} role="alert">
           {restoreError} Your pattern is unchanged.
+        </p>
+      ) : null}
+
+      {notice ? (
+        <p className={styles.notice} role="status">
+          {notice}
         </p>
       ) : null}
 

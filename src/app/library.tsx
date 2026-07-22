@@ -8,6 +8,7 @@ import {
   designFromJson,
   designToFragment,
   designToJson,
+  findByName,
   librarySnapshot,
   libraryServerSnapshot,
   loadSaved,
@@ -31,6 +32,7 @@ type Status = { tone: "ok" | "error"; text: string } | null;
 export function Library({ design, onLoad, store }: Props) {
   const [name, setName] = useState("");
   const [status, setStatus] = useState<Status>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // The library lives in localStorage, which the server cannot see. Reading it
@@ -46,9 +48,16 @@ export function Library({ design, onLoad, store }: Props) {
     setStatus({ tone, text });
 
   const handleSave = () => {
-    saveNamed(store, name, design);
+    const existing = findByName(store, name);
+    const { ok } = saveNamed(store, name, design, existing);
+
+    if (!ok) {
+      report("error", "This browser refused to save — storage may be full.");
+      return;
+    }
+
     setName("");
-    report("ok", "Saved.");
+    report("ok", existing ? "Replaced the pattern of that name." : "Saved.");
   };
 
   const handleLoad = (item: SavedDesign) => {
@@ -64,23 +73,39 @@ export function Library({ design, onLoad, store }: Props) {
   const handleRename = (item: SavedDesign) => {
     const next = globalThis.prompt("Rename pattern", item.name);
     if (next === null) return;
-    renameSaved(store, item.id, next);
+
+    const { ok } = renameSaved(store, item.id, next);
+    report(ok ? "ok" : "error", ok ? "Renamed." : "Could not rename.");
   };
 
   const handleDelete = (item: SavedDesign) => {
-    deleteSaved(store, item.id);
-    report("ok", `Deleted “${item.name}”.`);
+    const sure = globalThis.confirm(
+      `Delete “${item.name}”? This cannot be undone.`,
+    );
+    if (!sure) return;
+
+    const { ok } = deleteSaved(store, item.id);
+    report(
+      ok ? "ok" : "error",
+      ok ? `Deleted “${item.name}”.` : "Could not delete.",
+    );
   };
 
+  /*
+   * The link is deliberately not written into the address bar. A fragment left
+   * there outlives the share: a reload hours later would restore the pattern as
+   * it was at the moment of sharing and then autosave over everything since.
+   */
   const handleShare = async () => {
     const url = `${globalThis.location.origin}${globalThis.location.pathname}${designToFragment(design)}`;
-    globalThis.history.replaceState(null, "", url);
 
     try {
       await globalThis.navigator.clipboard.writeText(url);
-      report("ok", "Link copied. It contains the whole pattern.");
+      setShareLink(null);
+      report("ok", "Link copied. It carries the whole pattern.");
     } catch {
-      report("ok", "Link is in the address bar — copy it from there.");
+      setShareLink(url);
+      report("ok", "Copy this link — it carries the whole pattern.");
     }
   };
 
@@ -151,13 +176,22 @@ export function Library({ design, onLoad, store }: Props) {
         />
       </div>
 
-      {status ? (
-        <p
-          className={status.tone === "error" ? styles.error : styles.status}
-          role="status"
-        >
-          {status.text}
-        </p>
+      <p
+        className={status?.tone === "error" ? styles.error : styles.status}
+        role="status"
+      >
+        {status?.text ?? ""}
+      </p>
+
+      {shareLink ? (
+        <input
+          className={styles.shareLink}
+          type="text"
+          readOnly
+          value={shareLink}
+          aria-label="Share link"
+          onFocus={(event) => event.currentTarget.select()}
+        />
       ) : null}
 
       {items.length === 0 ? (

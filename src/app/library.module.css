@@ -140,3 +140,15 @@
   display: flex;
   gap: 0.35rem;
 }
+
+.shareLink {
+  font: inherit;
+  font-size: 0.8rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  background: var(--background);
+  color: var(--foreground);
+}

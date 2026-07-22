@@ -105,6 +105,28 @@ export function loadAutosave(store: KeyValueStore): Design | null {
   }
 }
 
+/**
+ * Why the stored working pattern could not be used, if it could not.
+ *
+ * Rejecting a future version is right, but replacing it on the next keystroke
+ * without saying so is not — the user would never learn their work was there.
+ */
+export function autosaveProblem(store: KeyValueStore): string | null {
+  const envelope = readJson<Envelope<string>>(store, AUTOSAVE_KEY);
+  if (!envelope) return null;
+
+  if (envelope.v !== STORAGE_VERSION) {
+    return `Saved work here was written by a newer version of this app (format ${envelope.v}), so it could not be opened.`;
+  }
+
+  try {
+    decodeDesign(envelope.data);
+    return null;
+  } catch (cause) {
+    return `Saved work here could not be read. ${cause instanceof Error ? cause.message : ""}`.trim();
+  }
+}
+
 export function clearAutosave(store: KeyValueStore): void {
   try {
     store.removeItem(AUTOSAVE_KEY);
@@ -127,6 +149,10 @@ export function listSaved(store: KeyValueStore): SavedDesign[] {
         typeof item?.name === "string" &&
         typeof item?.encoded === "string",
     )
+    .map((item) => ({
+      ...item,
+      savedAt: Number.isFinite(item.savedAt) ? item.savedAt : 0,
+    }))
     .sort((a, b) => b.savedAt - a.savedAt);
 }
 
@@ -186,12 +212,18 @@ export function libraryServerSnapshot(): SavedDesign[] {
   return EMPTY as SavedDesign[];
 }
 
+export interface WriteResult {
+  items: SavedDesign[];
+  /** False when storage refused the write — quota, or disabled mid-session. */
+  ok: boolean;
+}
+
 export function saveNamed(
   store: KeyValueStore,
   name: string,
   design: Design,
   id = newId(),
-): SavedDesign[] {
+): WriteResult {
   const trimmed = name.trim() || "Untitled";
   const others = listSaved(store).filter((item) => item.id !== id);
   const items = [
@@ -199,28 +231,37 @@ export function saveNamed(
     ...others,
   ];
 
-  writeLibrary(store, items);
-  return listSaved(store);
+  const ok = writeLibrary(store, items);
+  return { items: listSaved(store), ok };
+}
+
+/** The id of an existing entry with this name, so saving twice overwrites. */
+export function findByName(
+  store: KeyValueStore,
+  name: string,
+): string | undefined {
+  const trimmed = name.trim() || "Untitled";
+  return listSaved(store).find((item) => item.name === trimmed)?.id;
 }
 
 export function renameSaved(
   store: KeyValueStore,
   id: string,
   name: string,
-): SavedDesign[] {
+): WriteResult {
   const items = listSaved(store).map((item) =>
     item.id === id ? { ...item, name: name.trim() || item.name } : item,
   );
-  writeLibrary(store, items);
-  return listSaved(store);
+  const ok = writeLibrary(store, items);
+  return { items: listSaved(store), ok };
 }
 
-export function deleteSaved(store: KeyValueStore, id: string): SavedDesign[] {
-  writeLibrary(
+export function deleteSaved(store: KeyValueStore, id: string): WriteResult {
+  const ok = writeLibrary(
     store,
     listSaved(store).filter((item) => item.id !== id),
   );
-  return listSaved(store);
+  return { items: listSaved(store), ok };
 }
 
 export function loadSaved(store: KeyValueStore, id: string): Design | null {
