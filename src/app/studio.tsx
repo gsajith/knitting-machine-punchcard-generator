@@ -34,6 +34,7 @@ import {
 } from "@/lib/card/split";
 
 import { CardPreview } from "./card-preview";
+import { PrintingGuide } from "./printing-guide";
 import styles from "./studio.module.css";
 import { TileEditor } from "./tile-editor";
 
@@ -373,6 +374,8 @@ export function Studio() {
             </button>
           ) : null}
         </div>
+
+        <PrintingGuide profile={PROFILE} />
 
         <p className={styles.note}>
           Flattening replaces the motif with the whole card so stitches can be
