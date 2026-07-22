@@ -1,0 +1,94 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.scroller {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+}
+
+.card {
+  display: block;
+  width: 100%;
+  min-width: 9rem;
+  max-width: 15rem;
+  margin: 0 auto;
+  height: auto;
+}
+
+.body {
+  fill: var(--muted);
+  opacity: 0.22;
+}
+
+.patternHole {
+  fill: var(--foreground);
+}
+
+.beltHole {
+  fill: none;
+  stroke: var(--foreground);
+  stroke-width: 0.5;
+}
+
+.loopHole {
+  fill: none;
+  stroke: var(--foreground);
+  stroke-width: 0.5;
+  stroke-dasharray: 1.2 0.9;
+}
+
+.rowLabel {
+  font-size: 3px;
+  fill: var(--muted);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+.marks {
+  pointer-events: none;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.875rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.swatchPattern {
+  background: var(--foreground);
+}
+
+.swatchBelt {
+  border: 1px solid var(--foreground);
+}
+
+.swatchLoop {
+  border: 1px dashed var(--foreground);
+}
+
+.feed {
+  margin-left: auto;
+}

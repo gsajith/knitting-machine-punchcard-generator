@@ -1,0 +1,39 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.grid {
+  width: 100%;
+  max-width: 22rem;
+  touch-action: none;
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  background: var(--background);
+}
+
+.cell {
+  fill: transparent;
+  stroke: var(--rule);
+  stroke-width: 1;
+  cursor: crosshair;
+}
+
+.punched {
+  fill: var(--foreground);
+}
+
+.hovered {
+  stroke: var(--foreground);
+  stroke-width: 2;
+}
+
+.hint {
+  margin: 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  min-height: 1rem;
+}
