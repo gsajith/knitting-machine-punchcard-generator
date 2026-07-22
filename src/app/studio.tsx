@@ -1,0 +1,316 @@
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
+
+import {
+  cloneDesign,
+  designRows,
+  designToPattern,
+  flatten,
+  smallestLegalRepeats,
+  type Design,
+} from "@/lib/card/design";
+import { buildCardMesh } from "@/lib/card/mesh";
+import { applyOrientation, type Orientation } from "@/lib/card/orientation";
+import { countPunched } from "@/lib/card/pattern";
+import { BROTHER_24, cardLength } from "@/lib/card/profile";
+import {
+  createTile,
+  resizeTile,
+  tileWidthsFor,
+  type Tile,
+} from "@/lib/card/tile";
+import {
+  clearTile,
+  flipTile,
+  invertTile,
+  mirrorTile,
+  shiftTile,
+} from "@/lib/card/tile-ops";
+import { meshTo3mf } from "@/lib/card/threemf";
+
+import { CardPreview } from "./card-preview";
+import styles from "./studio.module.css";
+import { TileEditor } from "./tile-editor";
+
+const PROFILE = BROTHER_24;
+
+function startingDesign(): Design {
+  const tile = createTile(6, 8);
+  // A small diagonal, so the card is not blank on arrival and the orientation
+  // of the drawing is immediately obvious.
+  for (let row = 0; row < 8; row++) {
+    const width = Math.floor((row * 6) / 8);
+    for (let column = 0; column <= width; column++) {
+      tile.cells[row * 6 + column] = true;
+    }
+  }
+  return {
+    kind: "tile",
+    tile,
+    repeats: smallestLegalRepeats(tile, PROFILE.minRows),
+  };
+}
+
+export function Studio() {
+  const [design, setDesign] = useState<Design>(startingDesign);
+  const [past, setPast] = useState<Design[]>([]);
+  const [future, setFuture] = useState<Design[]>([]);
+  const [orientation, setOrientation] = useState<Orientation>({
+    mirror: false,
+    flip: false,
+  });
+
+  const commit = useCallback(
+    (next: Design) => {
+      setPast((stack) => [...stack.slice(-49), cloneDesign(design)]);
+      setFuture([]);
+      setDesign(next);
+    },
+    [design],
+  );
+
+  /** Records history once per drag rather than once per stitch. */
+  const [strokeOpen, setStrokeOpen] = useState(false);
+  const beginStroke = useCallback(() => {
+    setPast((stack) => [...stack.slice(-49), cloneDesign(design)]);
+    setFuture([]);
+    setStrokeOpen(true);
+  }, [design]);
+
+  const duringStroke = useCallback(
+    (next: Design) => {
+      if (strokeOpen) setDesign(next);
+      else commit(next);
+    },
+    [strokeOpen, commit],
+  );
+
+  const undo = () => {
+    setPast((stack) => {
+      if (stack.length === 0) return stack;
+      const previous = stack[stack.length - 1];
+      setFuture((f) => [cloneDesign(design), ...f]);
+      setDesign(previous);
+      return stack.slice(0, -1);
+    });
+  };
+
+  const redo = () => {
+    setFuture((stack) => {
+      if (stack.length === 0) return stack;
+      const next = stack[0];
+      setPast((p) => [...p, cloneDesign(design)]);
+      setDesign(next);
+      return stack.slice(1);
+    });
+  };
+
+  const rows = designRows(design);
+  const belowMinimum = rows < PROFILE.minRows;
+
+  const pattern = useMemo(
+    () => applyOrientation(designToPattern(design, PROFILE), orientation),
+    [design, orientation],
+  );
+
+  const download = () => {
+    const mesh = buildCardMesh(pattern, PROFILE);
+    const blob = new Blob([meshTo3mf(mesh, "punchcard")], {
+      type: "application/octet-stream",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `punchcard-${rows}-rows.3mf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const editTile = (change: (tile: Tile) => Tile) => {
+    if (design.kind !== "tile") return;
+    commit({ ...design, tile: change(design.tile) });
+  };
+
+  const isTile = design.kind === "tile";
+  const tile = isTile ? design.tile : null;
+
+  return (
+    <div className={styles.studio}>
+      <section className={styles.panel} aria-label="Motif">
+        <div className={styles.panelHead}>
+          <h2 className={styles.panelTitle}>Motif</h2>
+          <div className={styles.miniButtons}>
+            <button type="button" onClick={undo} disabled={past.length === 0}>
+              Undo
+            </button>
+            <button type="button" onClick={redo} disabled={future.length === 0}>
+              Redo
+            </button>
+          </div>
+        </div>
+
+        {isTile && tile ? (
+          <>
+            <TileEditor
+              tile={tile}
+              onChange={(next) => duringStroke({ ...design, tile: next })}
+              onStrokeStart={beginStroke}
+            />
+
+            <div className={styles.row}>
+              <label className={styles.field}>
+                <span>Stitches</span>
+                <select
+                  value={tile.width}
+                  onChange={(event) =>
+                    editTile((t) =>
+                      resizeTile(t, Number(event.target.value), t.height),
+                    )
+                  }
+                >
+                  {tileWidthsFor(PROFILE.columns).map((width) => (
+                    <option key={width} value={width}>
+                      {width}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className={styles.field}>
+                <span>Rows</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={tile.height}
+                  onChange={(event) => {
+                    const height = Number(event.target.value);
+                    if (!Number.isInteger(height) || height < 1) return;
+                    editTile((t) => resizeTile(t, t.width, height));
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className={styles.tools}>
+              <button type="button" onClick={() => editTile(clearTile)}>
+                Clear
+              </button>
+              <button type="button" onClick={() => editTile(invertTile)}>
+                Invert
+              </button>
+              <button type="button" onClick={() => editTile(mirrorTile)}>
+                Mirror
+              </button>
+              <button type="button" onClick={() => editTile(flipTile)}>
+                Flip
+              </button>
+              <button type="button" onClick={() => editTile((t) => shiftTile(t, 1, 0))}>
+                Shift ↑
+              </button>
+              <button type="button" onClick={() => editTile((t) => shiftTile(t, 0, 1))}>
+                Shift →
+              </button>
+            </div>
+
+            <p className={styles.note}>
+              Only widths that divide {PROFILE.columns} are offered, so the motif
+              repeats without a break across the card.
+            </p>
+          </>
+        ) : (
+          <p className={styles.note}>
+            This design has been flattened — the motif is gone and stitches are
+            edited on the whole card. Reload to start a new motif.
+          </p>
+        )}
+      </section>
+
+      <section className={styles.panel} aria-label="Card">
+        <div className={styles.panelHead}>
+          <h2 className={styles.panelTitle}>Card</h2>
+          <span className={styles.stat}>
+            {rows} rows · {cardLength(PROFILE, rows)} mm ·{" "}
+            {countPunched(pattern)} punched
+          </span>
+        </div>
+
+        <CardPreview pattern={pattern} profile={PROFILE} />
+
+        {isTile && tile ? (
+          <div className={styles.row}>
+            <label className={styles.field}>
+              <span>Repeats</span>
+              <input
+                type="number"
+                min={1}
+                max={40}
+                value={design.repeats}
+                onChange={(event) => {
+                  const repeats = Number(event.target.value);
+                  if (!Number.isInteger(repeats) || repeats < 1) return;
+                  commit({ ...design, repeats });
+                }}
+              />
+            </label>
+            <span className={styles.stat}>
+              {design.repeats} × {tile.height} rows = {rows} rows
+            </span>
+          </div>
+        ) : null}
+
+        {belowMinimum ? (
+          <p className={styles.warning} role="status">
+            {rows} rows is shorter than the {PROFILE.minRows} this machine needs
+            to wrap the drum. You can still export it — that minimum is a working
+            figure, not a measured one.
+          </p>
+        ) : null}
+
+        <div className={styles.row}>
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              checked={orientation.mirror}
+              onChange={(event) =>
+                setOrientation((o) => ({ ...o, mirror: event.target.checked }))
+              }
+            />
+            <span>Mirror across</span>
+          </label>
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              checked={orientation.flip}
+              onChange={(event) =>
+                setOrientation((o) => ({ ...o, flip: event.target.checked }))
+              }
+            />
+            <span>Flip along</span>
+          </label>
+        </div>
+
+        <div className={styles.actions}>
+          <button type="button" className={styles.primary} onClick={download}>
+            Download 3MF
+          </button>
+          {isTile ? (
+            <button
+              type="button"
+              onClick={() => commit(flatten(design, PROFILE))}
+            >
+              Flatten
+            </button>
+          ) : null}
+        </div>
+
+        <p className={styles.note}>
+          Flattening replaces the motif with the whole card so stitches can be
+          edited one by one. It cannot be undone by re-deriving a motif — the
+          card no longer says which repeat produced it.
+        </p>
+      </section>
+    </div>
+  );
+}
