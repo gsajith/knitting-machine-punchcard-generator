@@ -36,7 +36,7 @@ stitch pitch   4.5 mm            row pitch    5.0 mm         columns  24
 min rows       36
 pattern hole   3.25 w × 3.75 h   x = ±2.25 … ±51.75, row centres   [see ADR-0008]
 belt hole      ⌀3.25 round       x = ±57.25, every row centre      [drive — exact]
-loop hole      ⌀3.75 round       x = ±64.5, row boundaries, piece ends only
+loop hole      ⌀3.75 round       x = ±64.5, every interior row boundary
 ```
 
 All constants live in a single `CardProfile` object. No physical dimension is
@@ -45,10 +45,22 @@ written anywhere else in the codebase.
 140 mm was chosen because it is the width actually targeted at a KH-881, and a
 slightly narrow card cannot jam where an over-wide one can.
 
-Loop holes are placed at piece ends only, not at every row boundary as the
-reference does. On a 0.2 mm single-layer card the edge strip is the most fragile
-part of the object, and perforating it every 5 mm along its full length invites
-a tear.
+Loop holes go on **every interior row boundary**, matching the reference card:
+51 holes per side at a uniform 5.000 mm spacing, spanning ±125.0 on a 52-row
+card, which is precisely its 51 interior boundaries.
+
+This reverses an earlier decision. The first version of this ADR placed loop
+holes at the piece ends only, reasoning that on a 0.2 mm single-layer card the
+edge strip is the most fragile part of the object and perforating it every 5 mm
+invites a tear. That reasoning was sound but irrelevant: the repo owner reported
+that the resulting holes were too close together for their punchcard clips, and
+that the reference card's spacing fits them. Real Brother cards also carry the
+column along the full length.
+
+Physical fit beats a theoretical fragility argument. The fragility concern is
+not dismissed — it becomes a question about material and thickness, to be
+answered by the test print in #14, rather than a reason to omit holes the
+hardware needs.
 
 ## Consequences
 
@@ -57,3 +69,6 @@ a tear.
   constant precisely so it can be corrected without touching logic.
 - Unverified values are flagged in `SPEC.md` under "Open questions". They all
   resolve from a single test print.
+- A clip can be fitted at any row boundary, so a split seam does not have to
+  land where a loop hole happens to be. That removes a constraint #9 would
+  otherwise have had to work around.
