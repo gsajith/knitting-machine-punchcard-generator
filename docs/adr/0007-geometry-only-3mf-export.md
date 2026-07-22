@@ -7,10 +7,19 @@ Status: Accepted
 The card is **one layer thick** — the entire object *is* the first layer. That
 makes several slicer defaults actively hostile:
 
-- **Elephant-foot compensation** shrinks the first layer's outline inward. On a
-  normal part that is cosmetic; here it shrinks every hole, and a ⌀3.25 belt hole
-  losing 0.15 mm per side may no longer seat on a drum pin.
-- **XY hole compensation / horizontal expansion** does the same, deliberately.
+- **Elephant-foot compensation** pulls the first layer's *solid* outline inward
+  to cancel squish. On a normal part that only trims the bottom edge. Here the
+  whole card is that layer, so it removes material everywhere: holes grow and
+  the webs between them thin. At a typical 0.15 mm setting the 1.25 mm web
+  between neighbouring stitches drops to about 0.95 mm — the axis most likely to
+  tear — and belt holes go loose on the drum pins.
+
+  (An earlier version of this ADR had the mechanism backwards, claiming the
+  holes shrank. The conclusion — turn it off — was unaffected, but the reason
+  is the part that transfers between slicers, so it is worth being right.)
+- **XY size / hole compensation** adjusts hole and perimeter sizes deliberately.
+  Slicers name it differently and do not all apply it in the same direction, so
+  a positive value cannot be assumed safe. It should be zero.
 - First-layer squish, flow and plate texture land directly on finished
   dimensions rather than on a sacrificial bottom.
 - Material choice dominates: PLA at 0.2 mm is brittle in the weak-web direction;

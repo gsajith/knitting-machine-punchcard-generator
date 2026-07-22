@@ -34,6 +34,7 @@ import {
 } from "@/lib/card/split";
 
 import { CardPreview } from "./card-preview";
+import { PrintingGuide } from "./printing-guide";
 import styles from "./studio.module.css";
 import { TileEditor } from "./tile-editor";
 
@@ -379,6 +380,8 @@ export function Studio() {
           edited one by one. It cannot be undone by re-deriving a motif — the
           card no longer says which repeat produced it.
         </p>
+
+        <PrintingGuide profile={PROFILE} />
       </section>
     </div>
   );

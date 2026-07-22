@@ -4,7 +4,7 @@ Draw a pattern pixel-art style and get a 3D-printable punchcard for a 24-stitch
 knitting machine (Brother KH-881 and compatibles). Cards too long for the
 printer bed are split into pieces that clip back together.
 
-**Live:** https://knitting-machine-punchcard-generato.vercel.app/
+**Live:** https://punchcard-generator.vercel.app/
 
 ## Status
 
