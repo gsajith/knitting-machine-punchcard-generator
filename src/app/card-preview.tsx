@@ -14,13 +14,15 @@ import styles from "./card-preview.module.css";
 interface Props {
   pattern: Pattern;
   profile: CardProfile;
+  /** Row boundaries where the card is cut into pieces. */
+  seamBoundaries?: number[];
 }
 
 /**
  * The card as it will actually be punched — all three hole types, drawn to
  * scale in millimetres. Read-only: the motif is the document (ADR-0004).
  */
-export function CardPreview({ pattern, profile }: Props) {
+export function CardPreview({ pattern, profile, seamBoundaries = [] }: Props) {
   const width = profile.cardWidth;
   const height = pattern.rows * profile.rowPitch;
   const half = { x: width / 2, y: height / 2 };
@@ -89,6 +91,17 @@ export function CardPreview({ pattern, profile }: Props) {
           {patternHoles}
           {beltHoles}
           {loopHoles}
+
+          {seamBoundaries.map((boundary) => (
+            <line
+              key={`seam-${boundary}`}
+              x1={0}
+              x2={width}
+              y1={toY(rowBoundary(profile, boundary, pattern.rows))}
+              y2={toY(rowBoundary(profile, boundary, pattern.rows))}
+              className={styles.seam}
+            />
+          ))}
 
           <g className={styles.marks}>
             <text x={2} y={height - 1.5} className={styles.rowLabel}>
