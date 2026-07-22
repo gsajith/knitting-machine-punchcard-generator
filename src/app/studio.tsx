@@ -14,7 +14,7 @@ import { applyOrientation, type Orientation } from "@/lib/card/orientation";
 import { countPunched } from "@/lib/card/pattern";
 import { BROTHER_24, cardLength } from "@/lib/card/profile";
 import { resizeTile, tileWidthsFor, type Tile } from "@/lib/card/tile";
-import { usukiTile } from "@/lib/card/usuki";
+import { defaultMotif } from "@/lib/card/default-motif";
 import {
   clearTile,
   flipTile,
@@ -40,9 +40,7 @@ import { TileEditor } from "./tile-editor";
 const PROFILE = BROTHER_24;
 
 function startingDesign(): Design {
-  // A whole-card motif rather than a small repeat, so the app opens on
-  // something worth looking at instead of an empty grid.
-  const tile = usukiTile();
+  const tile = defaultMotif();
   return {
     kind: "tile",
     tile,
