@@ -23,7 +23,13 @@
 }
 
 .cell {
+  display: flex;
   aspect-ratio: 1;
+  min-width: 0;
+}
+
+.stitch {
+  flex: 1;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -35,15 +41,24 @@
   background: var(--foreground);
 }
 
-.cell:hover {
+.stitch:hover {
   box-shadow: inset 0 0 0 2px var(--muted);
 }
 
-.cell:focus-visible {
+/*
+ * The ring has to read against both cell states, and a punched cell is filled
+ * with the same colour the ring would otherwise use — so a focused punched
+ * cell inverts it.
+ */
+.stitch:focus-visible {
   outline: 2px solid var(--foreground);
   outline-offset: -2px;
   position: relative;
   z-index: 1;
+}
+
+.punched:focus-visible {
+  outline-color: var(--background);
 }
 
 .hint {

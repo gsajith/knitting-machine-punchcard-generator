@@ -124,30 +124,41 @@ export function TileEditor({ tile, onChange, onStrokeStart }: Props) {
               const isCursor = clamped.row === row && clamped.column === column;
 
               return (
-                <button
-                  type="button"
-                  role="gridcell"
-                  key={column}
-                  data-row={row}
-                  data-column={column}
-                  tabIndex={isCursor ? 0 : -1}
-                  aria-label={`Stitch ${column + 1}, row ${row + 1}`}
-                  aria-selected={punched}
-                  className={`${styles.cell} ${punched ? styles.punched : ""}`}
-                  onFocus={() => setCursor({ row, column })}
-                  onClick={() => paint({ row, column }, !punched)}
-                  onPointerDown={(event) => {
-                    // Release capture so pointerenter still fires on the cells
-                    // a drag passes over.
-                    event.currentTarget.releasePointerCapture?.(event.pointerId);
-                    onStrokeStart();
-                    painting.current = !punched;
-                  }}
-                  onPointerEnter={() => {
-                    if (painting.current === null) return;
-                    paint({ row, column }, painting.current);
-                  }}
-                />
+                <div role="gridcell" className={styles.cell} key={column}>
+                  <button
+                    type="button"
+                    data-row={row}
+                    data-column={column}
+                    tabIndex={isCursor ? 0 : -1}
+                    aria-label={`Stitch ${column + 1}, row ${row + 1}`}
+                    aria-pressed={punched}
+                    className={`${styles.stitch} ${punched ? styles.punched : ""}`}
+                    onFocus={() => setCursor({ row, column })}
+                    onClick={(event) => {
+                      // detail 0 means the click came from the keyboard; a
+                      // pointer press has already painted this cell.
+                      if (event.detail !== 0) return;
+                      onStrokeStart();
+                      paint({ row, column }, !punched);
+                    }}
+                    onPointerDown={(event) => {
+                      // Release capture so pointerenter still fires on the
+                      // cells a drag passes over.
+                      event.currentTarget.releasePointerCapture?.(
+                        event.pointerId,
+                      );
+                      onStrokeStart();
+                      painting.current = !punched;
+                      // The cell the drag starts on is part of the stroke;
+                      // pointerenter already fired before pointerdown.
+                      paint({ row, column }, !punched);
+                    }}
+                    onPointerEnter={() => {
+                      if (painting.current === null) return;
+                      paint({ row, column }, painting.current);
+                    }}
+                  />
+                </div>
               );
             })}
           </div>

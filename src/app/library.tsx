@@ -205,13 +205,25 @@ export function Library({ design, onLoad, store }: Props) {
             <li key={item.id} className={styles.item}>
               <span className={styles.itemName}>{item.name}</span>
               <span className={styles.itemActions}>
-                <button type="button" onClick={() => handleLoad(item)}>
+                <button
+                  type="button"
+                  aria-label={`Load “${item.name}”`}
+                  onClick={() => handleLoad(item)}
+                >
                   Load
                 </button>
-                <button type="button" onClick={() => handleRename(item)}>
+                <button
+                  type="button"
+                  aria-label={`Rename “${item.name}”`}
+                  onClick={() => handleRename(item)}
+                >
                   Rename
                 </button>
-                <button type="button" onClick={() => handleDelete(item)}>
+                <button
+                  type="button"
+                  aria-label={`Delete “${item.name}”`}
+                  onClick={() => handleDelete(item)}
+                >
                   Delete
                 </button>
               </span>
