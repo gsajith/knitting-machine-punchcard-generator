@@ -113,15 +113,30 @@ UI is manually tested in v1.
 
 All resolve from a single test print, and all are constants in one profile file.
 
-1. **Pin clearance** — does the reading mechanism accept a 3.25 mm horizontal
-   hole? The default rests on an inference from belt-hole size (ADR-0008). If
-   not, switch the default to Classic ⌀3.75 round.
-2. **Web survival** — do 1.25 mm webs at 0.2 mm thickness survive handling and
-   repeated feeding? Informs whether material guidance is sufficient.
-3. **Belt-hole seating** — do the drum pins seat cleanly in ⌀3.25?
-4. **Minimum row count** — 36 is a working figure, unverified.
-5. **Overlap depth** — 2 rows is supported by two artifacts; counting the
-   overlap rows on a genuine Brother blank would confirm it properly.
+### Settled by the first test print
+
+A card generated at the defaults was printed, fed and **knitted successfully**.
+
+1. ~~**Pin clearance**~~ — **confirmed.** The reading mechanism accepts the
+   3.25 mm horizontal hole; the pattern knitted as drawn. ADR-0008's inference
+   held.
+2. ~~**Belt-hole seating**~~ — **confirmed.** The drum pins seat in ⌀3.25 and
+   the card advances without slipping.
+3. ~~**Card width**~~ — **confirmed.** 140 mm fits the machine, despite the
+   reference card being 142.4 mm (ADR-0001).
+4. ~~**Clip fit**~~ — **confirmed.** Standard punchcard clips fit the loop
+   holes, spanning two boundaries (10 mm). This is why loop holes run the full
+   length of the card rather than sitting only at the ends.
+
+### Still open
+
+1. **Web survival** — do 1.25 mm webs at 0.2 mm thickness survive *repeated*
+   use? One successful knit shows the geometry reads; it says nothing about
+   fatigue. Informs whether the material guidance is sufficient.
+2. **Minimum row count** — 36 is still a working figure. The card that worked
+   was 40 rows, so the true minimum is somewhere at or below that.
+3. **Overlap depth** — 2 rows is supported by two artifacts but no split card
+   has been printed, so the seam itself is untested.
 
 ## 6. Build plan
 

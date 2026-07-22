@@ -131,18 +131,17 @@ function PrintingGuideContent({ profile }: Props) {
           <p className={styles.note}>
             <strong>Confirmed on a real machine:</strong> a{" "}
             {profile.thickness} mm card at {profile.cardWidth} mm wide feeds
-            correctly, the drum pins seat in the belt holes, and standard
-            punchcard clips fit the loop holes.
+            correctly, the drum pins seat in the belt holes, standard punchcard
+            clips fit the loop holes, and a card printed at these defaults has
+            been knitted with the pattern coming out as drawn.
           </p>
           <p className={styles.note}>
-            <strong>Not yet confirmed:</strong> that the elongated pattern holes
-            read as reliably as round ones — that is an inference from the belt
-            hole size, not a measurement. Also untested: how well the webs
-            survive repeated use, and whether a split card&rsquo;s seam holds.
-            The {profile.minRows}-row minimum is also a working figure rather
-            than a measured one. If a pattern reads intermittently, the round-hole
-            geometry is the thing to try — it exists in the code but is not yet
-            selectable here.
+            <strong>Not yet confirmed:</strong> how well the{" "}
+            {web.horizontal} mm webs hold up over <em>repeated</em> use — one
+            successful knit shows the geometry reads, not that it lasts. A split
+            card&rsquo;s seam is also untested, since none has been printed. The{" "}
+            {profile.minRows}-row minimum remains a working figure rather than a
+            measured one.
           </p>
         </section>
       </div>
